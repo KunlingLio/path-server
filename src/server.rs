@@ -6,6 +6,7 @@ use tower_lsp::lsp_types;
 
 use crate::document::Document;
 use crate::resolver::PathResolver;
+use crate::logger;
 
 #[derive(Debug)]
 pub struct PathServer {
@@ -16,6 +17,7 @@ pub struct PathServer {
 
 impl PathServer {
     pub fn new(client: tower_lsp::Client) -> Self {
+        logger::init(&client);
         Self {
             client,
             resolver: Arc::new(PathResolver::new()),
@@ -28,9 +30,7 @@ impl PathServer {
 impl tower_lsp::LanguageServer for PathServer {
     async fn initialize(&self, params: lsp_types::InitializeParams) -> Result<lsp_types::InitializeResult> {
         if let Some(url) = params.root_uri {
-            self.client
-                .log_message(lsp_types::MessageType::INFO, format!("[Path Server] Workspace root: {}", url))
-                .await;
+            logger::info(format!("Adding workspace root: {}", url)).await;
             self.resolver.add_workspace_root(&url);
         }
         Ok(lsp_types::InitializeResult {
@@ -62,9 +62,7 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn initialized(&self, _: lsp_types::InitializedParams) {
-        self.client
-            .log_message(lsp_types::MessageType::INFO, "[Path Server] Initialized!")
-            .await;
+        logger::info(format!("Path Server initialized")).await;
     }
 
     async fn did_change_workspace_folders(&self, params: lsp_types::DidChangeWorkspaceFoldersParams) {
