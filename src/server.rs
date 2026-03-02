@@ -121,52 +121,59 @@ impl tower_lsp::LanguageServer for PathServer {
         // 1. get prefix of current line
         let line_number = params.text_document_position.position.line as usize;
         let character = params.text_document_position.position.character as usize;
-        let prefix_string = self
+        let line_prefix = self
             .documents
             .lock()
             .await
             .get(&params.text_document_position.text_document.uri.to_string())
             .and_then(|doc| doc.get_line(line_number))
-            .map(|line| {
-                // let character = character.min(line.len());
-                line[..character].to_string()
-            })
+            .map(|line| line[..character].to_string())
             .unwrap_or("".into());
-        let candidate = parse_path(&prefix_string);
-        let prefix = PathBuf::from(candidate.clone()); // the path to be completed
-        info(format!("Completing prefix: '{}'", prefix.display())).await;
+        let raw_path = parse_path(&line_prefix);
+        info(format!("Completing for prefix: '{}'", raw_path)).await;
+
         // 2. parse prefix into finished and remains
-        let (finished, remains) = separate_prefix(&candidate);
-        let finished = PathBuf::from(finished);
+        let (base_dir, partial_name) = separate_prefix(&raw_path);
+        info(format!(
+            "Detected base_dir: '{}', partial_name: '{}'",
+            base_dir, partial_name
+        ))
+        .await;
+        let base_dir = PathBuf::from(base_dir);
+
         // 3. fs access
         let mut completion_filenames: Vec<lsp_types::CompletionItem> = vec![];
-        if prefix.is_absolute() {
+        if base_dir.is_absolute() {
             // a. absolute path
-            if !finished.exists() {
+            if !base_dir.exists() {
                 info(format!(
-                    "Prefix parent does not exist: {}",
-                    finished.display()
+                    "Base directory does not exist: {}",
+                    base_dir.display()
                 ))
                 .await;
                 return Ok(None);
             }
-            if !finished.is_dir() {
+            if !base_dir.is_dir() {
                 info(format!(
-                    "Prefix parent is not a directory: {}",
-                    finished.display()
+                    "Base directory is not a directory: {}",
+                    base_dir.display()
                 ))
                 .await;
                 return Ok(None);
             }
-            let Ok(files) = finished.read_dir() else {
-                info(format!("Failed to read directory: {}", finished.display())).await;
+            let Ok(files) = base_dir.read_dir() else {
+                info(format!(
+                    "Failed to read base directory: {}",
+                    base_dir.display()
+                ))
+                .await;
                 return Ok(None);
             };
             for file in files {
                 let Ok(file) = file else {
                     info(format!(
-                        "Failed to read file in directory: {}",
-                        finished.display()
+                        "Failed to read file in base directory: {}",
+                        base_dir.display()
                     ))
                     .await;
                     continue;
@@ -179,7 +186,7 @@ impl tower_lsp::LanguageServer for PathServer {
                     .await;
                     continue;
                 };
-                if !filename.starts_with(&remains) {
+                if !filename.starts_with(&partial_name) {
                     continue;
                 }
                 if file.path().is_dir() {
@@ -196,7 +203,7 @@ impl tower_lsp::LanguageServer for PathServer {
                     });
                 }
             }
-        } else if prefix.is_relative() {
+        } else if base_dir.is_relative() {
             // b. relative path
             let roots = self.workspace_root.read().await;
             for root in roots.iter() {
@@ -207,27 +214,27 @@ impl tower_lsp::LanguageServer for PathServer {
                     .await;
                     continue;
                 };
-                let dir = root_path.join(finished.clone());
+                let dir = root_path.join(&base_dir);
                 if !dir.exists() {
-                    info(format!("Prefix parent does not exist: {}", dir.display())).await;
+                    info(format!("Base directory does not exist: {}", dir.display())).await;
                     continue;
                 }
                 if !dir.is_dir() {
                     info(format!(
-                        "Prefix parent is not a directory: {}",
+                        "Base directory is not a directory: {}",
                         dir.display()
                     ))
                     .await;
                     continue;
                 }
                 let Ok(files) = dir.read_dir() else {
-                    info(format!("Failed to read directory: {}", dir.display())).await;
+                    info(format!("Failed to read base directory: {}", dir.display())).await;
                     continue;
                 };
                 for file in files {
                     let Ok(file) = file else {
                         info(format!(
-                            "Failed to read file in directory: {}",
+                            "Failed to read file in base directory: {}",
                             dir.display()
                         ))
                         .await;
@@ -241,7 +248,7 @@ impl tower_lsp::LanguageServer for PathServer {
                         .await;
                         continue;
                     };
-                    if !filename.starts_with(&remains) {
+                    if !filename.starts_with(&partial_name) {
                         continue;
                     }
                     if file.path().is_dir() {
@@ -273,65 +280,40 @@ impl tower_lsp::LanguageServer for PathServer {
 }
 
 fn separate_prefix(prefix: &str) -> (String, String) {
-    if cfg!(unix) {
-        let prefix = prefix.to_string();
-        let last_slash = prefix.rfind('/');
-        let (mut finished, remains) = if let Some(pos) = last_slash {
-            (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
-        } else {
-            // no slash, e.g. index.htm
-            ("".to_string(), prefix)
-        };
-        if finished.is_empty() {
-            finished = "./".to_string();
-        }
-        return (finished, remains);
-    } else if cfg!(windows) {
-        let prefix = prefix.to_string();
-        let last_backslash = prefix.rfind('\\');
-        let (mut finished, remains) = if let Some(pos) = last_backslash {
-            (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
-        } else {
-            // no backslash, e.g. index.htm
-            ("".to_string(), prefix)
-        };
-        if finished.is_empty() {
-            finished = "./".to_string();
-        }
-        return (finished, remains);
+    let prefix = prefix.to_string();
+    let last_slash = prefix.rfind('/');
+    let last_backslash = prefix.rfind('\\');
+    let (mut base_dir, partial_name) = if let Some(pos) = last_slash {
+        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
+    } else if let Some(pos) = last_backslash {
+        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
+    } else {
+        // no slash, e.g. index.htm
+        ("".to_string(), prefix)
+    };
+    if base_dir.is_empty() {
+        base_dir = "./".to_string();
     }
-    panic!("Unsupported platform!")
+    return (base_dir, partial_name);
 }
 
 fn parse_path(line: &str) -> String {
-    // // 1. parse by delimiters
-    // let delimiters = ['"', '\'', '`', '(', '['];
-    // for delimiter in delimiters {
-    //     if let Some(pos) = line.rfind(delimiter) {
-    //         return line[pos + 1..].to_string();
-    //     }
-    // }
-
-    // 2. parse by "D:" or ".\" or "..\" on windows
-    //          by "/" or "~/" or "./" or "../" on unix
-    if cfg!(unix) {
-        let beginning = ["~/", "./", "../", "/"];
-        for prefix in beginning {
-            if let Some(pos) = line.rfind(prefix) {
-                return line[pos..].to_string();
+    // 1. parse by beginning
+    //    e.g. "D:" or ".\" or "..\" for windows
+    //    e.g. "/" or "~/" or "./" or "../" for unix
+    let beginning = ["~/", "./", "../", "/"];
+    for prefix in beginning {
+        if let Some(pos) = line.rfind(prefix) {
+            return line[pos..].to_string();
+        }
+    }
+    let beginning_regex = [r#"[a-zA-Z]:\\"#, r#"\.\\"#, r#"\.\.\\ "#];
+    for regex in beginning_regex {
+        if let Ok(re) = Regex::new(regex) {
+            if let Some(mat) = re.find_iter(line).last() {
+                return line[mat.start()..].to_string();
             }
         }
-    } else if cfg!(windows) {
-        let beginning_regex = [r#"^[a-zA-Z]:\\"#, r#"^\.\\"#, r#"^\.\.\\ "#];
-        for regex in beginning_regex {
-            if let Ok(re) = Regex::new(regex) {
-                if let Some(mat) = re.find(line) {
-                    return line[mat.end()..].to_string();
-                }
-            }
-        }
-    } else {
-        panic!("Unsupported platform!")
     }
     // 3. parse by space
     if let Some(pos) = line.rfind(' ') {
