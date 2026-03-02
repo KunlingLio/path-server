@@ -216,7 +216,51 @@ impl tower_lsp::LanguageServer for PathServer {
                     .await;
                     continue;
                 };
-                // TODO
+                let dir = root_path.join(finished.clone());
+                if !dir.exists() {
+                    continue;
+                }
+                if !dir.is_dir() {
+                    continue;
+                }
+                let Ok(files) = dir.read_dir() else {
+                    info(format!("Failed to read directory: {}", dir.display())).await;
+                    continue;
+                };
+                for file in files {
+                    let Ok(file) = file else {
+                        info(format!(
+                            "Failed to read file in directory: {}",
+                            dir.display()
+                        ))
+                        .await;
+                        continue;
+                    };
+                    let Ok(filename) = file.file_name().into_string() else {
+                        info(format!(
+                            "Failed to convert file name to string: {}",
+                            file.path().display()
+                        ))
+                        .await;
+                        continue;
+                    };
+                    if !filename.starts_with(&remains) {
+                        continue;
+                    }
+                    if file.path().is_dir() {
+                        completion_filenames.push(lsp_types::CompletionItem {
+                            label: filename,
+                            kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                            ..Default::default()
+                        });
+                    } else {
+                        completion_filenames.push(lsp_types::CompletionItem {
+                            label: filename,
+                            kind: Some(lsp_types::CompletionItemKind::FILE),
+                            ..Default::default()
+                        });
+                    }
+                }
             }
         } else {
             panic!("Unreachable!")
