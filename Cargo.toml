@@ -7,3 +7,6 @@ edition = "2024"
 regex = "1.12.3"
 tokio = { version = "1.49.0", features = ["full"] }
 tower-lsp = "0.20.0"
+
+[dev-dependencies]
+tempfile = "3.26.0"

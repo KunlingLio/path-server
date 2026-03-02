@@ -6,10 +6,14 @@ use tower_lsp::lsp_types;
 static LSP_CLIENT: OnceLock<tower_lsp::Client> = OnceLock::new();
 
 pub fn init(client: &tower_lsp::Client) {
-    LSP_CLIENT.set(client.clone()).unwrap();
+    let _ = LSP_CLIENT.set(client.clone()); // ignore multi init error
 }
 
 pub async fn log(message: String) {
+    if cfg!(test) {
+        println!("[LOG] {}", message);
+        return;
+    }
     if let Some(client) = LSP_CLIENT.get() {
         client
             .log_message(lsp_types::MessageType::LOG, message)
@@ -20,6 +24,10 @@ pub async fn log(message: String) {
 }
 
 pub async fn info(message: String) {
+    if cfg!(test) {
+        println!("[INFO] {}", message);
+        return;
+    }
     if let Some(client) = LSP_CLIENT.get() {
         client
             .log_message(lsp_types::MessageType::INFO, message)
@@ -30,6 +38,10 @@ pub async fn info(message: String) {
 }
 
 pub async fn error(message: String) {
+    if cfg!(test) {
+        println!("[ERROR] {}", message);
+        return;
+    }
     if let Some(client) = LSP_CLIENT.get() {
         client
             .log_message(lsp_types::MessageType::ERROR, message)

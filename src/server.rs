@@ -127,7 +127,10 @@ impl tower_lsp::LanguageServer for PathServer {
             .await
             .get(&params.text_document_position.text_document.uri.to_string())
             .and_then(|doc| doc.get_line(line_number))
-            .map(|line| line[..character].to_string())
+            .map(|line| {
+                let end = std::cmp::min(character, line.len());
+                line[..end].to_string()
+            })
             .unwrap_or("".into());
         let raw_path = parse_path(&line_prefix);
         info(format!("Completing for prefix: '{}'", raw_path)).await;
@@ -139,6 +142,13 @@ impl tower_lsp::LanguageServer for PathServer {
             base_dir, partial_name
         ))
         .await;
+        // manual unfold "~"
+        let base_dir = if base_dir.starts_with("~/") {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "".into());
+            format!("{}{}", home, &base_dir[1..])
+        } else {
+            base_dir
+        };
         let base_dir = PathBuf::from(base_dir);
 
         // 3. fs access

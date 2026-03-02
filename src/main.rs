@@ -1,7 +1,4 @@
-mod document;
-mod logger;
-mod server;
-use crate::server::PathServer;
+use path_server::PathServer;
 
 #[tokio::main]
 async fn main() {
