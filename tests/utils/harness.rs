@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use path_server::PathServer;
 use std::fs::{self, File};
 use std::path::PathBuf;

@@ -41,7 +41,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_parse_line() {
+    fn test_parse_line_ascii() {
         // 1. unix home dir
         assert_eq!(
             parse_line("~/projects/rust/main.rs"),
@@ -72,5 +72,57 @@ mod test {
 
         // 5. multi path in same line
         assert_eq!(parse_line("from /tmp/a to /var/log/b"), "/var/log/b");
+    }
+
+    #[test]
+    fn test_parse_line_utf8() {
+        assert_eq!(
+            parse_line("import './中文文件夹/中文文件.js"),
+            "./中文文件夹/中文文件.js"
+        );
+        // unix absolute with chinese
+        assert_eq!(parse_line("打开 /中文/文件.txt"), "/中文/文件.txt");
+        // home directory with chinese
+        assert_eq!(parse_line("~/项目/主要.rs"), "~/项目/主要.rs");
+        // relative current dir
+        assert_eq!(parse_line("./中文/文件.js"), "./中文/文件.js");
+        // relative parent dir in a quoted string
+        assert_eq!(
+            parse_line("let s = \"../数据/配置.json"),
+            "../数据/配置.json"
+        );
+        // markdown link containing Chinese path
+        assert_eq!(parse_line("[链接](./文档/说明.md"), "./文档/说明.md");
+        // windows path with Chinese components (escaped backslashes)
+        assert_eq!(parse_line("路径 C:\\项目\\子目录\\"), "C:\\项目\\子目录\\");
+    }
+
+    #[test]
+    fn test_parse_line_empty() {
+        assert_eq!(parse_line(""), "");
+        assert_eq!(parse_line("   "), "");
+    }
+
+    // TODO: pass this test
+    // #[test]
+    // fn test_parse_line_mixed() {
+    //     assert_eq!(
+    //         parse_line("././../.././weird-file_name.v1.2"),
+    //         "././../.././weird-file_name.v1.2"
+    //     );
+    // }
+
+    #[test]
+    fn test_parse_line_network() {
+        // network URL
+        assert_eq!(
+            parse_line("see http://example.com/path/to/res"),
+            "http://example.com/path/to/res"
+        );
+        // Windows-style network path
+        assert_eq!(
+            parse_line("copy \\\\server\\share\\file.txt"),
+            "\\\\server\\share\\file.txt"
+        );
     }
 }

@@ -225,4 +225,67 @@ mod tests {
         assert_eq!(base, "./");
         assert_eq!(partial, ".config");
     }
+
+    #[test]
+    fn test_url_to_path() {
+        // valid file url
+        let url = lsp_types::Url::parse("file:///tmp").unwrap();
+        let path = url_to_path(&url).unwrap();
+        assert!(path.ends_with("tmp"));
+
+        // non-file scheme should error
+        let url = lsp_types::Url::parse("http://example.com").unwrap();
+        let err = url_to_path(&url).unwrap_err();
+        match err {
+            PathServerError::Unsupported(_) => {}
+            _ => assert!(false, "expected Unsupported error, got: {}", err),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_complete_absolute() {
+        // prepare a temporary directory structure
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+        // files and dirs
+        std::fs::create_dir(base.join("app_dir")).unwrap();
+        std::fs::File::create(base.join("apple.txt")).unwrap();
+        std::fs::File::create(base.join("banana.txt")).unwrap();
+
+        // complete_absolute with partial "app"
+        let abs_results = complete_absolute(&base.to_path_buf(), "app").await.unwrap();
+        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        assert!(labels.contains(&"apple.txt".to_string()));
+        assert!(labels.contains(&"app_dir".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_complete_relative() {
+        // prepare workspace root with a subdir
+        let ws = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        std::fs::create_dir(root.join("subdir")).unwrap();
+        std::fs::File::create(root.join("subdir").join("part.txt")).unwrap();
+        std::fs::create_dir(root.join("subdir").join("parcel")).unwrap();
+
+        // complete_relative for base_dir "subdir/" and partial "par"
+        let rel_results = complete_relative(&PathBuf::from("subdir/"), "par", root)
+            .await
+            .unwrap();
+        let mut found_file = false;
+        let mut found_dir = false;
+        for item in rel_results {
+            if item.label == "part.txt" {
+                assert_eq!(item.detail.as_deref(), Some("From Workspace"));
+                assert_eq!(item.insert_text.as_deref(), Some("part.txt"));
+                found_file = true;
+            }
+            if item.label == "parcel" {
+                assert_eq!(item.detail.as_deref(), Some("From Workspace"));
+                assert_eq!(item.insert_text.as_deref(), Some("parcel"));
+                found_dir = true;
+            }
+        }
+        assert!(found_file && found_dir);
+    }
 }

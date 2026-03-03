@@ -138,4 +138,69 @@ World"#;
                 + "이것은 UTF-8 문자 테스트입니다。".len()
         );
     }
+
+    #[test]
+    fn test_get_line_utf8() {
+        let text = [
+            "第一行内容\n",
+            "第二行-包含中文 and ASCII characters\n",
+            "第三行结束\n",
+        ];
+        let doc = Document::new(text.concat());
+
+        // get full lines
+        assert_eq!(doc.get_line(0, None).unwrap(), text[0]);
+        assert_eq!(doc.get_line(1, None).unwrap(), text[1]);
+        assert_eq!(doc.get_line(2, None).unwrap(), text[2]);
+        // get line with end
+        assert_eq!(doc.get_line(0, Some(3)).unwrap(), "第一行");
+        assert_eq!(
+            doc.get_line(1, Some(18)).unwrap(),
+            "第二行-包含中文 and ASCII"
+        );
+        assert_eq!(doc.get_line(2, Some(1)).unwrap(), "第");
+    }
+
+    #[test]
+    fn test_apply_change_range() {
+        let text = ["First line\n", "Second line: 包含中文\n", "Third line\n"];
+        let mut doc = Document::new(text.concat());
+        assert_eq!(doc.text, text.concat());
+
+        // replace second line by range (line 1 start -> line 2 start)
+        let change = lsp_types::TextDocumentContentChangeEvent {
+            range: Some(lsp_types::Range {
+                start: lsp_types::Position {
+                    line: 1,
+                    character: 0,
+                },
+                end: lsp_types::Position {
+                    line: 2,
+                    character: 0,
+                },
+            }),
+            range_length: None,
+            text: "New second line: 也包含中文\n".to_string(),
+        };
+
+        doc.apply_change(&change).unwrap();
+        assert_eq!(
+            doc.get_line(1, None).unwrap(),
+            "New second line: 也包含中文\n"
+        );
+    }
+    #[test]
+    fn test_apply_change_full() {
+        let text = ["First line\n", "Second line: 包含中文\n", "Third line\n"];
+        let mut doc = Document::new(text.concat());
+        assert_eq!(doc.text, text.concat());
+        // full document replace when range is None
+        let full = lsp_types::TextDocumentContentChangeEvent {
+            range: None,
+            range_length: None,
+            text: "New beginning\nAnother line\n".to_string(),
+        };
+        doc.apply_change(&full).unwrap();
+        assert_eq!(doc.text, "New beginning\nAnother line\n");
+    }
 }
