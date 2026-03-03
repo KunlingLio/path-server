@@ -239,7 +239,11 @@ mod tests {
     #[test]
     fn test_url_to_path() {
         // valid file url
-        let url = lsp_types::Url::parse("file:///tmp").unwrap();
+        #[cfg(not(windows))]
+        let url_str = "file:///tmp";
+        #[cfg(windows)]
+        let url_str = "file:///C:/tmp";
+        let url = lsp_types::Url::parse(url_str).unwrap();
         let path = url_to_path(&url).unwrap();
         assert!(path.ends_with("tmp"));
 
