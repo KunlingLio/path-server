@@ -12,7 +12,7 @@ pub async fn complete(
 ) -> Vec<lsp_types::CompletionItem> {
     // 1. separate prefix into finished and remains
     let (base_dir, partial_name) = separate_prefix(&prefix);
-    info(format!(
+    debug(format!(
         "Detected base_dir: '{}', partial_name: '{}'",
         base_dir, partial_name
     ))
@@ -37,7 +37,7 @@ pub async fn complete(
         // base on workspace roots
         for root in workspace_roots.iter() {
             let Ok(root_path) = root.to_file_path() else {
-                info(format!(
+                debug(format!(
                     "Failed to convert workspace root to file path: {root}"
                 ))
                 .await;
@@ -56,7 +56,7 @@ pub async fn complete(
             }
         }
     } else {
-        panic!("Unreachable!")
+        assert!(false, "Unreachable!");
     };
     return completions;
 }
@@ -85,7 +85,7 @@ async fn complete_absolute(
 ) -> Vec<lsp_types::CompletionItem> {
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     if !base_dir.exists() {
-        info(format!(
+        debug(format!(
             "Base directory does not exist: {}",
             base_dir.display()
         ))
@@ -93,7 +93,7 @@ async fn complete_absolute(
         return vec![];
     }
     if !base_dir.is_dir() {
-        info(format!(
+        debug(format!(
             "Base directory is not a directory: {}",
             base_dir.display()
         ))
@@ -101,7 +101,7 @@ async fn complete_absolute(
         return vec![];
     }
     let Ok(files) = base_dir.read_dir() else {
-        info(format!(
+        debug(format!(
             "Failed to read base directory: {}",
             base_dir.display()
         ))
@@ -110,7 +110,7 @@ async fn complete_absolute(
     };
     for file in files {
         let Ok(file) = file else {
-            info(format!(
+            debug(format!(
                 "Failed to read file in base directory: {}",
                 base_dir.display()
             ))
@@ -118,7 +118,7 @@ async fn complete_absolute(
             continue;
         };
         let Ok(filename) = file.file_name().into_string() else {
-            info(format!(
+            debug(format!(
                 "Failed to convert file name to string: {}",
                 file.path().display()
             ))
@@ -153,11 +153,11 @@ async fn complete_relative(
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     let dir = root.join(&base_dir);
     if !dir.exists() {
-        info(format!("Base directory does not exist: {}", dir.display())).await;
+        debug(format!("Base directory does not exist: {}", dir.display())).await;
         return vec![];
     }
     if !dir.is_dir() {
-        info(format!(
+        debug(format!(
             "Base directory is not a directory: {}",
             dir.display()
         ))
@@ -165,12 +165,12 @@ async fn complete_relative(
         return vec![];
     }
     let Ok(files) = dir.read_dir() else {
-        info(format!("Failed to read base directory: {}", dir.display())).await;
+        debug(format!("Failed to read base directory: {}", dir.display())).await;
         return vec![];
     };
     for file in files {
         let Ok(file) = file else {
-            info(format!(
+            debug(format!(
                 "Failed to read file in base directory: {}",
                 dir.display()
             ))
@@ -178,7 +178,7 @@ async fn complete_relative(
             continue;
         };
         let Ok(filename) = file.file_name().into_string() else {
-            info(format!(
+            debug(format!(
                 "Failed to convert file name to string: {}",
                 file.path().display()
             ))

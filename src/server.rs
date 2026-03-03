@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types;
 
+use crate::common::*;
 use crate::completion;
 use crate::document::Document;
 use crate::logger::{self, *};
@@ -36,7 +37,7 @@ impl tower_lsp::LanguageServer for PathServer {
         params: lsp_types::InitializeParams,
     ) -> Result<lsp_types::InitializeResult> {
         if let Some(url) = params.root_uri {
-            info(format!("Adding workspace root: {}", url)).await;
+            log(format!("Adding workspace root: {}", url)).await;
             let mut roots = self.workspace_roots.write().await;
             roots.insert(url.clone());
         }
@@ -53,7 +54,7 @@ impl tower_lsp::LanguageServer for PathServer {
                     ..Default::default()
                 }),
                 text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(
-                    lsp_types::TextDocumentSyncKind::FULL,
+                    lsp_types::TextDocumentSyncKind::INCREMENTAL,
                 )),
                 workspace: Some(lsp_types::WorkspaceServerCapabilities {
                     workspace_folders: Some(lsp_types::WorkspaceFoldersServerCapabilities {
@@ -69,7 +70,7 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn initialized(&self, _: lsp_types::InitializedParams) {
-        info(format!("Path Server initialized")).await;
+        log(format!("Path Server initialized")).await;
     }
 
     async fn did_change_workspace_folders(
@@ -96,13 +97,24 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_change(&self, params: lsp_types::DidChangeTextDocumentParams) {
-        if let Some(change) = params.content_changes.into_iter().next() {
-            self.documents
-                .lock()
-                .await
-                .entry(params.text_document.uri.to_string())
-                .and_modify(|doc| doc.update_text(change.text.clone()))
-                .or_insert_with(|| Document::new(change.text));
+        let uri = params.text_document.uri.to_string();
+        let mut docs = self.documents.lock().await;
+        let doc = docs
+            .entry(uri)
+            .or_insert_with(|| Document::new(String::new()));
+        // apply each change in order
+        for change in params.content_changes.into_iter() {
+            let result = doc.apply_change(&change);
+            if let Err(e) = result {
+                error(format!("Failed to apply change: {}", e)).await;
+                continue;
+            }
+            log(format!(
+                "Applied change to document: {}",
+                params.text_document.uri
+            ))
+            .await;
+            debug(format!("Document text: {}", doc.text)).await;
         }
     }
 
@@ -120,21 +132,16 @@ impl tower_lsp::LanguageServer for PathServer {
         // 1. get the line prefix
         let line_number = params.text_document_position.position.line as usize;
         let character = params.text_document_position.position.character as usize;
-        let line_prefix = self
-            .documents
-            .lock()
-            .await
-            .get(&params.text_document_position.text_document.uri.to_string())
-            .and_then(|doc| doc.get_line(line_number))
-            .map(|line| {
-                let end = std::cmp::min(character, line.len());
-                line[..end].to_string()
-            })
-            .unwrap_or("".into());
+        let url = &params.text_document_position.text_document.uri.to_string();
+        let documents = self.documents.lock().await;
+        let Some(doc) = documents.get(url) else {
+            return Err(PathServerError::Unknown(format!("Document not found: {}", url)).into());
+        };
+        let line_prefix = doc.get_line(line_number, Some(character))?;
 
         // 2. parse the line
         let raw_path = parser::parse_line(&line_prefix);
-        info(format!("Completing for prefix: '{}'", raw_path)).await;
+        debug(format!("Completing for prefix: '{}'", raw_path)).await;
 
         // 3. completion
         let file_path = params.text_document_position.text_document.uri;
