@@ -1,7 +1,7 @@
 {
-  "name": "path-server-vscode",
+  "name": "path-server",
   "displayName": "Path Server",
-  "description": "",
+  "description": "Fast, lightweight path autocomplete provided by Path Server",
   "version": "0.1.0",
   "engines": {
     "vscode": "^1.75.0"
@@ -11,6 +11,14 @@
     "type": "git",
     "url": "https://github.com/KunlingLio/project-timer.git"
   },
+  "publisher": "LKL",
+  "keywords": [
+    "path",
+    "completion",
+    "intellisense",
+    "language server",
+    "lsp"
+  ],
   "categories": [
     "Other"
   ],
@@ -19,12 +27,7 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "path-server-vscode.helloWorld",
-        "title": "Hello World"
-      }
-    ]
+    "commands": []
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
