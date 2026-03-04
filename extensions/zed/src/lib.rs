@@ -55,10 +55,17 @@ impl PathServerExtension {
 
         // 2. check if version matched release
         // TODO: support finding highest compatible version
-        if !release
-            .version
-            .starts_with(&format!("v{}", COMPATIBLE_MAJOR_VERSION))
-        {
+        let mut compatible = false;
+        for comp_major_version in COMPATIBLE_MAJOR_VERSION {
+            if release
+                .version
+                .starts_with(&format!("v{}", comp_major_version))
+            {
+                compatible = true;
+                break;
+            }
+        }
+        if !compatible {
             return Err(format!("Incompatible version: {}", release.version));
         }
 
@@ -82,7 +89,7 @@ impl PathServerExtension {
                 return Err("Unsupported platform or architecture.".to_string());
             }
         };
-        let asset_name = format!("path-server-{}-{}", release.version, target);
+        let asset_name = format!("path-server_{}_{}", release.version, target);
         let Some(asset) = release.assets.iter().find(|asset| asset.name == asset_name) else {
             return Err("No asset found with name.".to_string());
         };
@@ -131,7 +138,7 @@ impl PathServerExtension {
                 let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) else {
                     continue;
                 };
-                if name.starts_with("path-server-") && name != asset.name {
+                if name.starts_with("path-server_") && name != asset.name {
                     std::fs::remove_file(&entry_path).ok();
                 }
             }
@@ -145,11 +152,11 @@ impl PathServerExtension {
         let mut max_version: Option<String> = None;
         for entry in entries.flatten() {
             let name = entry.file_name().to_str()?.to_string();
-            if name.starts_with("path-server-") {
-                // extract v0.1.0 from path-server-v0.1.0-target
-                let parts: Vec<&str> = name.split('-').collect();
-                if parts.len() > 2 {
-                    let version = parts[2].to_string();
+            if name.starts_with("path-server_") {
+                // extract v0.1.0 from path-server_v0.1.0_target
+                let parts: Vec<&str> = name.split('_').collect();
+                if parts.len() >= 2 {
+                    let version = parts[1].to_string();
                     if max_version
                         .as_ref()
                         .is_none_or(|max| version_gt(&version, max))
