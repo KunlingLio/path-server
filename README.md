@@ -22,7 +22,7 @@ You can use it by installing specified extension for your editor.
 ### VS Code
 1. Search for `Path Server` in the VS Code extensions marketplace or download `.vsix` file and install it manually. 
 2. Start typing a path prefix like `./`, `/` or `C:` in any file to trigger suggestions.
-3. Open the settings and search for `path-server` to customize the configuration options.
+3. Open the settings and search for `path-server` or use the command `Path Server: Open Configuration` to customize the configuration options.
 
 *You can toggle Output panel and choose `Path Server Language Server` to view detailed logs.*
 

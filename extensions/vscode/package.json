@@ -27,7 +27,12 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [],
+    "commands": [
+      {
+        "title": "Path Server: Open configuration",
+        "command": "path-server.openConfiguration"
+      }
+    ],
     "configuration": [
       {
         "title": "Path Server: Completion",

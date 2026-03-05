@@ -15,6 +15,7 @@ All notable changes to the Path Server will be documented in this file.
     - `path-server.completion.basePath`:  Base paths for relative path completion.
 - **Zed**: Support read custom configuration from `settings.json` > `lsp.path-server.settings`.
 - **VS Code**: Support reading custom configuration from settings panel `path-server`.
+- **VS Code**: Add command `Path Server: Open Configuration` to open Path Server configuration.
 - Add detailed description of configuration usage and configuration options.
 
 ## [0.2.0] - 2026-03-04
