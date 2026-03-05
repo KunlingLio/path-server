@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::path::PathBuf;
 
 use serde::Deserialize;
 use tower_lsp::lsp_types;
@@ -7,13 +8,71 @@ use crate::logger::*;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    /// Max results showed in completion, 0 indicate no limit
+    pub completion: Completion,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Completion {
+    /// Max results shown in completion, 0 indicate no limit
+    #[serde(alias = "maxResults")]
     pub max_results: usize,
+
+    /// Whether to show hidden files in completion
+    #[serde(alias = "showHiddenFiles")]
+    pub show_hidden_files: bool,
+
+    /// List of paths to exclude from completion
+    /// Supports glob patterns
+    pub exclude: Vec<String>,
+
+    /// Base paths for relative path completion
+    /// Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders
+    #[serde(alias = "basePath")]
+    pub base_path: Vec<String>,
+}
+
+impl Completion {
+    pub fn iter_base_path(
+        &self,
+        workspace_folders: &[String],
+        document_parent: &Option<String>,
+        user_home: &Option<String>,
+    ) -> Vec<PathBuf> {
+        let mut expanded_paths = vec![];
+        for path in &self.base_path {
+            if path.contains("${workspaceFolder}") {
+                for workspace_folder in workspace_folders {
+                    let expanded = path.replace("${workspaceFolder}", workspace_folder);
+                    expanded_paths.push(PathBuf::from(expanded));
+                }
+            } else if path.contains("${document}") {
+                if document_parent.is_some() {
+                    let expanded = path.replace("${document}", document_parent.as_deref().unwrap());
+                    expanded_paths.push(PathBuf::from(expanded));
+                }
+            } else if path.contains("${userHome}") {
+                if user_home.is_some() {
+                    let expanded = path.replace("${userHome}", user_home.as_deref().unwrap());
+                    expanded_paths.push(PathBuf::from(expanded));
+                }
+            } else {
+                expanded_paths.push(PathBuf::from(path));
+            }
+        }
+        expanded_paths
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { max_results: 0 }
+        Self {
+            completion: Completion {
+                max_results: 0,
+                show_hidden_files: true,
+                exclude: vec!["**/node_modules/**".into(), "**/.git/**".into()],
+                base_path: vec!["${workspaceFolder}".into(), "${document}".into()],
+            },
+        }
     }
 }
 

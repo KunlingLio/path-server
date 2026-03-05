@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types;
 
+use crate::common::*;
 use crate::completion;
 use crate::config;
 use crate::document::Document;
@@ -39,6 +40,15 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::InitializeParams,
     ) -> jsonrpc::Result<lsp_types::InitializeResult> {
+        // for backward compatibility
+        if let Some(uri) = params.root_uri {
+            let Ok(root) = url_to_path(&uri) else {
+                info(format!("Failed to convert root URI to file path: {}", uri)).await;
+                return Err(jsonrpc::Error::invalid_params("Invalid root URI"));
+            };
+            let mut roots = self.workspace_roots.write().await;
+            roots.insert(root);
+        }
         if let Some(folders) = params.workspace_folders {
             let mut roots = self.workspace_roots.write().await;
             for folder in folders {
@@ -180,7 +190,11 @@ impl tower_lsp::LanguageServer for PathServer {
         let documents = self.documents.lock().await;
         let Some(doc) = documents.get(&path) else {
             info(format!("Document not found: {}", path.display())).await;
-            return Ok(None);
+            return Err(PathServerError::Unknown(format!(
+                "Document not found: {}",
+                path.display()
+            ))
+            .into());
         };
         let line_prefix = doc.get_line(line_number, Some(character))?;
 
@@ -189,12 +203,19 @@ impl tower_lsp::LanguageServer for PathServer {
         debug(format!("Completing for prefix: '{}'", raw_path)).await;
 
         // completion
-        let max_completions = config::get(&self.client).await.max_results;
-        let file_path =
-            url_to_path(&params.text_document_position.text_document.uri).unwrap_or_default();
+        let completion_config = config::get(&self.client).await.completion;
+        let Ok(file_path) = url_to_path(&params.text_document_position.text_document.uri) else {
+            info(format!(
+                "Failed to convert URI to file path: {}",
+                params.text_document_position.text_document.uri
+            ))
+            .await;
+            return Ok(None);
+        };
         let workspace_roots = self.workspace_roots.read().await;
         let completions =
-            completion::complete(&raw_path, &workspace_roots, &file_path, max_completions).await?;
+            completion::complete(&raw_path, &workspace_roots, &file_path, &completion_config)
+                .await?;
 
         return Ok(Some(lsp_types::CompletionResponse::Array(completions)));
     }

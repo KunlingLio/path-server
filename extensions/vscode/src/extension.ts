@@ -40,7 +40,7 @@ export async function activate(context: vscode.ExtensionContext) {
             { scheme: 'untitled', language: '*' }
         ],
         outputChannel: serverOutputChannel,
-        traceOutputChannel: traceChannel
+        traceOutputChannel: traceChannel,
     };
 
     client = new languageClient.LanguageClient(

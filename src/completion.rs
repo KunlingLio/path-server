@@ -1,9 +1,12 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use globset::{Glob, GlobSet, GlobSetBuilder};
+use hf::is_hidden;
 use tower_lsp::lsp_types;
 
 use crate::common::*;
+use crate::config;
 use crate::logger::*;
 use crate::parser;
 
@@ -11,7 +14,7 @@ pub async fn complete(
     prefix: &str,
     workspace_roots: &HashSet<PathBuf>,
     current_file: &PathBuf,
-    max_completions: usize,
+    completion_config: &config::Completion,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
     debug(format!(
@@ -25,30 +28,45 @@ pub async fn complete(
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     if base_dir.is_absolute() {
         // absolute path
-        let absolute_completions = complete_absolute(&base_dir, &partial_name).await?;
+        let absolute_completions = complete_absolute(
+            &base_dir,
+            &partial_name,
+            completion_config.show_hidden_files,
+        )
+        .await?;
         completions.extend(absolute_completions);
     } else if base_dir.is_relative() {
         // relative path
-        // base on workspace roots
-        for root_path in workspace_roots.iter() {
-            let rel_workspace_completions =
-                complete_relative(&base_dir, &partial_name, &root_path).await?;
-            completions.extend(rel_workspace_completions);
+        let workspace_folders = workspace_roots
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let parent = current_file
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned());
+        let home = std::env::var("HOME").ok();
+        let base_paths = completion_config.iter_base_path(&workspace_folders, &parent, &home);
+        let mut rel_completions = vec![];
+        for base_path in base_paths {
+            let completions = complete_relative(
+                &base_dir,
+                &partial_name,
+                &base_path,
+                completion_config.show_hidden_files,
+            )
+            .await?;
+            rel_completions.extend(completions);
         }
-        // base on current file url
-        let Some(parent) = current_file.parent() else {
-            return Err(PathServerError::Unknown(format!(
-                "Failed to get parent directory of current file: {}",
-                current_file.display()
-            )));
-        };
-        let rel_current_file_completions =
-            complete_relative(&base_dir, &partial_name, parent).await?;
-        completions.extend(rel_current_file_completions);
+        completions.extend(rel_completions);
     } else {
         unreachable!()
     };
-    Ok(filter(completions, max_completions))
+    Ok(filter(
+        completions,
+        completion_config.max_results,
+        &completion_config.exclude,
+    )
+    .await)
 }
 
 /// Expand "~" to the user's home directory
@@ -65,10 +83,35 @@ fn expand_tilde(path: &str) -> PathServerResult<String> {
 }
 
 /// Filter duplicated and ignored completions
-fn filter(
+async fn filter(
     completions: Vec<lsp_types::CompletionItem>,
     max_completions: usize,
+    exclude_patterns: &[String],
 ) -> Vec<lsp_types::CompletionItem> {
+    let mut builder = GlobSetBuilder::new();
+    for pattern in exclude_patterns {
+        let Ok(glob) = Glob::new(pattern) else {
+            info(format!(
+                "Invalid glob pattern in config.completion.exclude: {}, ignoring",
+                pattern
+            ))
+            .await;
+            continue;
+        };
+        builder.add(glob);
+    }
+    let exclude_set = match builder.build() {
+        Ok(set) => set,
+        Err(e) => {
+            info(format!(
+                "Failed to build exclude set: {}, ignoring exclusions",
+                e
+            ))
+            .await;
+            GlobSet::new(vec![Glob::new("").unwrap()]).unwrap()
+        }
+    };
+
     let mut seen_labels: HashSet<String> = HashSet::new();
     let ignore_labels: HashSet<String> = HashSet::from([".DS_Store".to_string()]); // TODO: support config ignores
     let max_completions = if max_completions == 0 {
@@ -76,11 +119,13 @@ fn filter(
     } else {
         max_completions
     };
+
     completions
         .into_iter()
         .filter(|item| {
             seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label)
         })
+        .filter(|item| !exclude_set.is_match(&item.label))
         .take(max_completions)
         .collect()
 }
@@ -88,6 +133,7 @@ fn filter(
 async fn complete_absolute(
     base_dir: &Path,
     partial_name: &str,
+    show_hidden_files: bool,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     if !base_dir.exists() {
@@ -118,6 +164,9 @@ async fn complete_absolute(
         if !filename.starts_with(partial_name) {
             continue;
         }
+        if !show_hidden_files && is_hidden(&file.path())? {
+            continue;
+        }
         if file.path().is_dir() {
             completions.push(lsp_types::CompletionItem {
                 label: filename,
@@ -139,6 +188,7 @@ async fn complete_relative(
     base_dir: &PathBuf,
     partial_name: &str,
     root: &Path,
+    show_hidden_files: bool,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     let dir = root.join(base_dir);
@@ -164,6 +214,9 @@ async fn complete_relative(
             ))
         })?;
         if !filename.starts_with(partial_name) {
+            continue;
+        }
+        if !show_hidden_files && is_hidden(&file.path())? {
             continue;
         }
         if file.path().is_dir() {
@@ -198,7 +251,9 @@ mod tests {
         std::fs::File::create(base.join("banana.txt")).unwrap();
 
         // complete_absolute with partial "app"
-        let abs_results = complete_absolute(&base.to_path_buf(), "app").await.unwrap();
+        let abs_results = complete_absolute(&base.to_path_buf(), "app", true)
+            .await
+            .unwrap();
         let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
         assert!(labels.contains(&"apple.txt".to_string()));
         assert!(labels.contains(&"app_dir".to_string()));
@@ -214,7 +269,7 @@ mod tests {
         std::fs::create_dir(root.join("subdir").join("parcel")).unwrap();
 
         // complete_relative for base_dir "subdir/" and partial "par"
-        let rel_results = complete_relative(&PathBuf::from("subdir/"), "par", root)
+        let rel_results = complete_relative(&PathBuf::from("subdir/"), "par", root, true)
             .await
             .unwrap();
         let mut found_file = false;

@@ -27,7 +27,46 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": []
+    "commands": [],
+    "configuration": [
+      {
+        "title": "Path Server: Completion",
+        "properties": {
+          "path-server.completion.maxResults": {
+            "type": "number",
+            "default": 0,
+            "description": "Max results shown in completion. 0 indicates no limit."
+          },
+          "path-server.completion.showHiddenFiles": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to show hidden files in completion."
+          },
+          "path-server.completion.exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "**/node_modules/**",
+              "**/.git/**"
+            ],
+            "description": "List of paths to exclude from completion. Supports glob patterns."
+          },
+          "path-server.completion.basePath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "${workspaceFolder}",
+              "${document}"
+            ],
+            "description": "Base paths for relative path completion. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
+          }
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

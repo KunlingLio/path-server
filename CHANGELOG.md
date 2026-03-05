@@ -8,7 +8,14 @@ All notable changes to the Path Server will be documented in this file.
 
 ### Added
 - **Core**: Add version log during initialization.
-- **Core**: Add configuration support.
+- **Core**: Support custom configuration.
+    - `path-server.completion.maxResults`: Max results shown in completion.
+    - `path-server.completion.showHiddenFiles`: Whether to show hidden files in completion.
+    - `path-server.completion.exclude`: List of paths to exclude from completion. Supports glob patterns.
+    - `path-server.completion.basePath`:  Base paths for relative path completion.
+- **Zed**: Support read custom configuration from `settings.json` > `lsp.path-server.settings`.
+- **VS Code**: Support reading custom configuration from settings panel `path-server`.
+- Add detailed description of configuration usage and configuration options.
 
 ## [0.2.0] - 2026-03-04
 ### Added
