@@ -56,10 +56,10 @@ impl PathServerExtension {
         // 2. check if version matched release
         // TODO: support finding highest compatible version
         let mut compatible = false;
-        for comp_major_version in COMPATIBLE_MAJOR_VERSION {
+        for comp_major_version in COMPATIBLE_MAJOR_VERSIONS {
             if release
                 .version
-                .starts_with(&format!("v{}", comp_major_version))
+                .starts_with(&format!("v{}.", comp_major_version))
             {
                 compatible = true;
                 break;
