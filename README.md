@@ -29,6 +29,7 @@ Search for `Path Server` in the Zed extensions catalog. Start typing a path pref
 
 ## Resources
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
+- [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=LKL.path-server)
 
 ## Development
 ### Open with multi-root workspace
