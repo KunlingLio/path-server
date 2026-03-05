@@ -83,6 +83,8 @@ cd extensions/zed
 
 ## TODO
 - [x] Support relative and absolute path completion.
+- [ ] Automatically trigger next completion.
+- [ ] Support configurations.
 - [ ] Implement "Go to Definition" for file paths.
 - [ ] Support path highlight.
 - [ ] Support remote URL.

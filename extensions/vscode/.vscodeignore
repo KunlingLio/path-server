@@ -10,3 +10,4 @@ esbuild.js
 **/*.ts
 **/.vscode-test.*
 node_modules/**
+scripts/**
