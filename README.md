@@ -4,7 +4,7 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 
 ## Features
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
-- **Fast and Lightweight**: Native-level response speed and consume only ~10MB memory with very low cpu usage.
+- **Fast and Lightweight**: Native-level response speed and consume only ~5MB memory with very low cpu usage.
 - **Language Compatibility**: Support all text files discarding programming languages.
 - **Cross IDEs**: Works seamlessly with any editor that supports the Language Server Protocol (e.g., VS Code, Zed, Neovim).
 
@@ -32,6 +32,13 @@ Search for `Path Server` in the Zed extensions catalog. Start typing a path pref
 - [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=LKL.path-server)
 
 ## Development
+### File Structure
+The **Path Server** project is organized in mono-repository structure with core LSP server implementation and extensions for different editors.
+
+- The core LSP server implementation is located in the repository root.
+- The **Zed Extension** is located in `./extensions/zed`.
+- The **VS Code** is located in `./extensions/vscode`.
+
 ### Open with multi-root workspace
 If you are using VS Code, you can open this repository with multiple root folders by open `.vscode/path-server.code-workspace` file.
 

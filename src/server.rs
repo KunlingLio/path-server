@@ -12,6 +12,8 @@ use crate::document::Document;
 use crate::logger::{self, *};
 use crate::parser;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug)]
 pub struct PathServer {
     // client: tower_lsp::Client,
@@ -71,6 +73,7 @@ impl tower_lsp::LanguageServer for PathServer {
 
     async fn initialized(&self, _: lsp_types::InitializedParams) {
         log("Path Server initialized".to_string()).await;
+        log(format!("Path Server version: {}", VERSION)).await;
     }
 
     async fn did_change_workspace_folders(
