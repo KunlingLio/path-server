@@ -1,14 +1,12 @@
 name: Check and Test
 
 on:
-  push:
-    branches: [master]
   pull_request:
     branches: [master]
   workflow_call:
 jobs:
-  check-path-server:
-    name: Format and Clippy Path Server
+  check-rust:
+    name: Format and Clippy Path Server and Zed Extension
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -19,33 +17,18 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Run Format Check
-        run: cargo fmt --all -- --check
+      - name: Check for Path Server
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy -- -D warnings
 
-      - name: Run Clippy
-        run: cargo clippy -- -D warnings
-
-  check-zed-extension:
-    name: Format and Clippy Zed Extension
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Run Format Check
+      - name: Check for Zed Extension
         working-directory: ./extensions/zed
-        run: cargo fmt --all -- --check
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy -- -D warnings
 
-      - name: Run Clippy
-        working-directory: ./extensions/zed
-        run: cargo clippy -- -D warnings
-
-  check-vscode-extension:
+  check-typescript:
     name: Check VSCode Extension
     runs-on: ubuntu-latest
     steps:

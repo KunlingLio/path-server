@@ -115,7 +115,6 @@ jobs:
         with:
           files: artifacts/*
           body: |
-            ## Path Server ${{ github.ref_name }}
             See the [CHANGELOG.md](./CHANGELOG.md) for details.
           draft: false
           prerelease: false
