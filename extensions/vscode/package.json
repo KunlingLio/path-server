@@ -31,6 +31,10 @@
       {
         "title": "Path Server: Open configuration",
         "command": "path-server.openConfiguration"
+      },
+      {
+        "title": "Path Server: Restart Server",
+        "command": "path-server.restartServer"
       }
     ],
     "configuration": [
