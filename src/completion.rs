@@ -10,6 +10,12 @@ use crate::config;
 use crate::logger::*;
 use crate::parser;
 
+/// The wrapper struct inside this module to store additional information.
+struct CompletionItemInner {
+    completion: lsp_types::CompletionItem,
+    full_path: PathBuf,
+}
+
 pub async fn complete(
     prefix: &str,
     workspace_roots: &HashSet<PathBuf>,
@@ -25,7 +31,7 @@ pub async fn complete(
     let base_dir = expand_tilde(&base_dir)?;
     let base_dir = PathBuf::from(base_dir);
 
-    let mut completions: Vec<lsp_types::CompletionItem> = vec![];
+    let mut completions: Vec<CompletionItemInner> = vec![];
     if base_dir.is_absolute() {
         // absolute path
         let absolute_completions = complete_absolute(
@@ -84,7 +90,7 @@ fn expand_tilde(path: &str) -> PathServerResult<String> {
 
 /// Filter duplicated and ignored completions
 async fn filter(
-    completions: Vec<lsp_types::CompletionItem>,
+    completions: Vec<CompletionItemInner>,
     max_completions: usize,
     exclude_patterns: &[String],
 ) -> Vec<lsp_types::CompletionItem> {
@@ -123,10 +129,12 @@ async fn filter(
     completions
         .into_iter()
         .filter(|item| {
-            seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label)
+            seen_labels.insert(item.completion.label.clone())
+                && !ignore_labels.contains(&item.completion.label)
         })
-        .filter(|item| !exclude_set.is_match(&item.label))
+        .filter(|item| !exclude_set.is_match(&item.full_path))
         .take(max_completions)
+        .map(|item| item.completion)
         .collect()
 }
 
@@ -134,8 +142,8 @@ async fn complete_absolute(
     base_dir: &Path,
     partial_name: &str,
     show_hidden_files: bool,
-) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
-    let mut completions: Vec<lsp_types::CompletionItem> = vec![];
+) -> PathServerResult<Vec<CompletionItemInner>> {
+    let mut completions = vec![];
     if !base_dir.exists() {
         debug(format!(
             "Base directory does not exist: {}",
@@ -168,16 +176,22 @@ async fn complete_absolute(
             continue;
         }
         if file.path().is_dir() {
-            completions.push(lsp_types::CompletionItem {
-                label: filename,
-                kind: Some(lsp_types::CompletionItemKind::FOLDER),
-                ..Default::default()
+            completions.push(CompletionItemInner {
+                completion: lsp_types::CompletionItem {
+                    label: filename,
+                    kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                    ..Default::default()
+                },
+                full_path: file.path(),
             });
         } else {
-            completions.push(lsp_types::CompletionItem {
-                label: filename,
-                kind: Some(lsp_types::CompletionItemKind::FILE),
-                ..Default::default()
+            completions.push(CompletionItemInner {
+                completion: lsp_types::CompletionItem {
+                    label: filename,
+                    kind: Some(lsp_types::CompletionItemKind::FILE),
+                    ..Default::default()
+                },
+                full_path: file.path(),
             });
         }
     }
@@ -189,8 +203,8 @@ async fn complete_relative(
     partial_name: &str,
     root: &Path,
     show_hidden_files: bool,
-) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
-    let mut completions: Vec<lsp_types::CompletionItem> = vec![];
+) -> PathServerResult<Vec<CompletionItemInner>> {
+    let mut completions = vec![];
     let dir = root.join(base_dir);
     if !dir.exists() {
         debug(format!("Base directory does not exist: {}", dir.display())).await;
@@ -220,16 +234,22 @@ async fn complete_relative(
             continue;
         }
         if file.path().is_dir() {
-            completions.push(lsp_types::CompletionItem {
-                label: filename.clone(),
-                kind: Some(lsp_types::CompletionItemKind::FOLDER),
-                ..Default::default()
+            completions.push(CompletionItemInner {
+                completion: lsp_types::CompletionItem {
+                    label: filename.clone(),
+                    kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                    ..Default::default()
+                },
+                full_path: file.path(),
             });
         } else {
-            completions.push(lsp_types::CompletionItem {
-                label: filename.clone(),
-                kind: Some(lsp_types::CompletionItemKind::FILE),
-                ..Default::default()
+            completions.push(CompletionItemInner {
+                completion: lsp_types::CompletionItem {
+                    label: filename.clone(),
+                    kind: Some(lsp_types::CompletionItemKind::FILE),
+                    ..Default::default()
+                },
+                full_path: file.path(),
             });
         }
     }
@@ -277,21 +297,30 @@ mod tests {
     async fn test_filter() {
         // test filter duplicate and exclude
         let items = vec![
-            lsp_types::CompletionItem {
-                label: "keep.txt".into(),
-                ..Default::default()
+            CompletionItemInner {
+                completion: lsp_types::CompletionItem {
+                    label: "keep.txt".into(),
+                    ..Default::default()
+                },
+                full_path: std::path::PathBuf::from("/some/path/to/keep.txt"),
             },
-            lsp_types::CompletionItem {
-                label: "ignore.log".into(),
-                ..Default::default()
+            CompletionItemInner {
+                completion: lsp_types::CompletionItem {
+                    label: "ignore.log".into(),
+                    ..Default::default()
+                },
+                full_path: std::path::PathBuf::from("/some/path/to/ignore.log"),
             },
-            lsp_types::CompletionItem {
-                label: "keep.txt".into(),
-                ..Default::default()
+            CompletionItemInner {
+                completion: lsp_types::CompletionItem {
+                    label: "keep.txt".into(),
+                    ..Default::default()
+                },
+                full_path: std::path::PathBuf::from("/some/path/to/keep.txt"),
             }, // duplicate
         ];
         let filtered = filter(items, 0, &vec!["*.log".into()]).await;
-        // should drop ".log", dedupe
+        // should drop ".log" and deduplicate
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].label, "keep.txt");
 
@@ -309,7 +338,13 @@ mod tests {
                 label: "3.txt".into(),
                 ..Default::default()
             }, // duplicate
-        ];
+        ]
+        .iter()
+        .map(|completion| CompletionItemInner {
+            completion: completion.clone(),
+            full_path: std::path::PathBuf::new(),
+        })
+        .collect();
         let filtered = filter(items, 1, &vec![]).await;
         // should cap at 1
         assert_eq!(filtered.len(), 1);
@@ -351,7 +386,10 @@ mod tests {
         let abs_results = complete_absolute(&base.to_path_buf(), "app", true)
             .await
             .unwrap();
-        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        let labels: Vec<String> = abs_results
+            .into_iter()
+            .map(|c| c.completion.label)
+            .collect();
         assert!(labels.contains(&"apple.txt".to_string()));
         assert!(labels.contains(&"app_dir".to_string()));
     }
@@ -385,7 +423,10 @@ mod tests {
         let abs_results = complete_absolute(&base.to_path_buf().join("a_dir"), "", false)
             .await
             .unwrap();
-        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        let labels: Vec<String> = abs_results
+            .into_iter()
+            .map(|c| c.completion.label)
+            .collect();
         assert!(labels.contains(&"visible_file.txt".to_string()));
         assert!(!labels.contains(&hidden_filepath));
 
@@ -393,7 +434,10 @@ mod tests {
         let abs_results = complete_absolute(&base.to_path_buf().join("a_dir"), "", true)
             .await
             .unwrap();
-        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        let labels: Vec<String> = abs_results
+            .into_iter()
+            .map(|c| c.completion.label)
+            .collect();
         assert!(labels.contains(&"visible_file.txt".to_string()));
         assert!(labels.contains(&hidden_filename));
     }
@@ -414,12 +458,12 @@ mod tests {
         let mut found_file = false;
         let mut found_dir = false;
         for item in rel_results {
-            if item.label == "part.txt" {
-                assert_eq!(item.label, "part.txt".to_string());
+            if item.completion.label == "part.txt" {
+                assert_eq!(item.completion.label, "part.txt".to_string());
                 found_file = true;
             }
-            if item.label == "parcel" {
-                assert_eq!(item.label, "parcel".to_string());
+            if item.completion.label == "parcel" {
+                assert_eq!(item.completion.label, "parcel".to_string());
                 found_dir = true;
             }
         }
@@ -455,7 +499,10 @@ mod tests {
         let abs_results = complete_relative(&PathBuf::from("./a_dir"), "", base, false)
             .await
             .unwrap();
-        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        let labels: Vec<String> = abs_results
+            .into_iter()
+            .map(|c| c.completion.label)
+            .collect();
         assert!(labels.contains(&"visible_file.txt".to_string()));
         assert!(!labels.contains(&hidden_filepath));
 
@@ -463,7 +510,10 @@ mod tests {
         let abs_results = complete_relative(&PathBuf::from("./a_dir"), "", base, true)
             .await
             .unwrap();
-        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        let labels: Vec<String> = abs_results
+            .into_iter()
+            .map(|c| c.completion.label)
+            .collect();
         assert!(labels.contains(&"visible_file.txt".to_string()));
         assert!(labels.contains(&hidden_filename));
     }
