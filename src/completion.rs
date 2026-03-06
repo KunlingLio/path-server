@@ -174,8 +174,14 @@ async fn complete_absolute(
         if file.path().is_dir() {
             completions.push(CompletionItemInner {
                 completion: lsp_types::CompletionItem {
-                    label: filename,
+                    label: filename.clone(),
                     kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                    insert_text: Some(filename + "/"),
+                    command: Some(lsp_types::Command {
+                        title: "triggerSuggest".to_string(),
+                        command: "editor.action.triggerSuggest".to_string(),
+                        arguments: None,
+                    }),
                     ..Default::default()
                 },
                 full_path: file.path(),
@@ -183,8 +189,9 @@ async fn complete_absolute(
         } else {
             completions.push(CompletionItemInner {
                 completion: lsp_types::CompletionItem {
-                    label: filename,
+                    label: filename.clone(),
                     kind: Some(lsp_types::CompletionItemKind::FILE),
+                    insert_text: Some(filename),
                     ..Default::default()
                 },
                 full_path: file.path(),
@@ -234,6 +241,12 @@ async fn complete_relative(
                 completion: lsp_types::CompletionItem {
                     label: filename.clone(),
                     kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                    insert_text: Some(filename + "/"),
+                    command: Some(lsp_types::Command {
+                        title: "triggerSuggest".to_string(),
+                        command: "editor.action.triggerSuggest".to_string(),
+                        arguments: None,
+                    }),
                     ..Default::default()
                 },
                 full_path: file.path(),
@@ -243,6 +256,7 @@ async fn complete_relative(
                 completion: lsp_types::CompletionItem {
                     label: filename.clone(),
                     kind: Some(lsp_types::CompletionItemKind::FILE),
+                    insert_text: Some(filename),
                     ..Default::default()
                 },
                 full_path: file.path(),

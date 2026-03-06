@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **Core**: Support automatically trigger next completion after selecting a completion.
+
 ## [0.3.0] 2026-03-06
 ### Fixed
 - **Zed**: Fix version-compatibility check — correctly parse the major version so `v10.x.x` is not mistaken for `v1.x.x`.

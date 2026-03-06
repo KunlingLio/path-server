@@ -53,8 +53,8 @@
               "type": "string"
             },
             "default": [
-              "**/node_modules/**",
-              "**/.git/**",
+              "**/node_modules",
+              "**/.git",
               "**/.DS_Store"
             ],
             "description": "List of paths to exclude from completion. Supports glob patterns."
