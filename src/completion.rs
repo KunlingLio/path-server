@@ -2,13 +2,13 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use hf::is_hidden;
 use tower_lsp::lsp_types;
 
 use crate::common::*;
 use crate::config;
 use crate::logger::*;
 use crate::parser;
+use crate::utils;
 
 /// The wrapper struct inside this module to store additional information.
 struct CompletionItemInner {
@@ -168,7 +168,7 @@ async fn complete_absolute(
         if !filename.starts_with(partial_name) {
             continue;
         }
-        if !show_hidden_files && is_hidden(file.path())? {
+        if !show_hidden_files && utils::is_hidden_file(&file.path())? {
             continue;
         }
         if file.path().is_dir() {
@@ -226,7 +226,7 @@ async fn complete_relative(
         if !filename.starts_with(partial_name) {
             continue;
         }
-        if !show_hidden_files && is_hidden(file.path())? {
+        if !show_hidden_files && utils::is_hidden_file(&file.path())? {
             continue;
         }
         if file.path().is_dir() {
@@ -399,13 +399,18 @@ mod tests {
         std::fs::File::create(base.join("a_dir").join("visible_file.txt")).unwrap();
         std::fs::File::create(base.join("a_dir").join("hidden_file.txt")).unwrap();
         hf::hide(base.join("a_dir").join("hidden_file.txt")).unwrap();
-        let hidden_filepath = if cfg!(unix) {
-            hf::unix::hidden_file_name(base.join("a_dir").join("hidden_file.txt"))
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-        } else {
-            "hidden_file.txt".to_string()
+        let hidden_filepath = {
+            #[cfg(unix)]
+            {
+                hf::unix::hidden_file_name(base.join("a_dir").join("hidden_file.txt"))
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            }
+            #[cfg(not(unix))]
+            {
+                "hidden_file.txt".to_string()
+            }
         };
         let hidden_filename = std::path::PathBuf::from(&hidden_filepath)
             .file_name()
@@ -475,13 +480,18 @@ mod tests {
         std::fs::File::create(base.join("a_dir").join("visible_file.txt")).unwrap();
         std::fs::File::create(base.join("a_dir").join("hidden_file.txt")).unwrap();
         hf::hide(base.join("a_dir").join("hidden_file.txt")).unwrap();
-        let hidden_filepath = if cfg!(unix) {
-            hf::unix::hidden_file_name(base.join("a_dir").join("hidden_file.txt"))
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-        } else {
-            "hidden_file.txt".to_string()
+        let hidden_filepath = {
+            #[cfg(unix)]
+            {
+                hf::unix::hidden_file_name(base.join("a_dir").join("hidden_file.txt"))
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            }
+            #[cfg(not(unix))]
+            {
+                "hidden_file.txt".to_string()
+            }
         };
         let hidden_filename = std::path::PathBuf::from(&hidden_filepath)
             .file_name()
