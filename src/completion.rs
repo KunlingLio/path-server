@@ -13,7 +13,7 @@ use crate::parser;
 pub async fn complete(
     prefix: &str,
     workspace_roots: &HashSet<PathBuf>,
-    current_file: &PathBuf,
+    current_file: &Path,
     completion_config: &config::Completion,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
@@ -164,7 +164,7 @@ async fn complete_absolute(
         if !filename.starts_with(partial_name) {
             continue;
         }
-        if !show_hidden_files && is_hidden(&file.path())? {
+        if !show_hidden_files && is_hidden(file.path())? {
             continue;
         }
         if file.path().is_dir() {
@@ -216,7 +216,7 @@ async fn complete_relative(
         if !filename.starts_with(partial_name) {
             continue;
         }
-        if !show_hidden_files && is_hidden(&file.path())? {
+        if !show_hidden_files && is_hidden(file.path())? {
             continue;
         }
         if file.path().is_dir() {
