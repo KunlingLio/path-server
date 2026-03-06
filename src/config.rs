@@ -110,3 +110,72 @@ pub async fn get(client: &tower_lsp::Client) -> Config {
     };
     config
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let cfg = Config::default();
+        assert_eq!(cfg.completion.max_results, 0);
+        assert!(cfg.completion.show_hidden_files);
+        assert_eq!(
+            cfg.completion.exclude,
+            vec!["**/node_modules/**", "**/.git/**"]
+        );
+        assert_eq!(
+            cfg.completion.base_path,
+            vec!["${workspaceFolder}", "${document}"]
+        );
+    }
+
+    #[test]
+    fn test_iter_base_path_expands_workspace_and_document() {
+        let completion = Completion {
+            max_results: 0,
+            show_hidden_files: true,
+            exclude: vec![],
+            base_path: vec![
+                "${workspaceFolder}/src".into(),
+                "${document}".into(),
+                "/absolute/path".into(),
+            ],
+        };
+
+        let workspace_folders = vec!["/ws1".to_string(), "/ws2".to_string()];
+        let document_parent = Some("/ws1/project".to_string());
+        let user_home = None;
+
+        let result = completion.iter_base_path(&workspace_folders, &document_parent, &user_home);
+
+        let expected: Vec<PathBuf> = vec![
+            "/ws1/src".into(),
+            "/ws2/src".into(),
+            "/ws1/project".into(),
+            "/absolute/path".into(),
+        ];
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_iter_base_path_skips_missing_document_or_user_home() {
+        let completion = Completion {
+            max_results: 0,
+            show_hidden_files: true,
+            exclude: vec![],
+            base_path: vec!["${document}".into(), "${userHome}/foo".into()],
+        };
+
+        let workspace_folders = vec![];
+        let document_parent = None;
+        let user_home = Some("/home/user".to_string());
+
+        let result = completion.iter_base_path(&workspace_folders, &document_parent, &user_home);
+
+        let expected: Vec<PathBuf> = vec!["/home/user/foo".into()];
+
+        assert_eq!(result, expected);
+    }
+}

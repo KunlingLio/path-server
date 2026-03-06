@@ -20,7 +20,7 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 You can use it by installing specified extension for your editor.
 
 ### VS Code
-1. Search for `Path Server` in the VS Code extensions marketplace or download `.vsix` file and install it manually. 
+1. Search for `Path Server` in the VS Code extensions marketplace or download `.vsix` file from [Releases](https://github.com/kunlinglio/path-server/releases) and install it manually. 
 2. Start typing a path prefix like `./`, `/` or `C:` in any file to trigger suggestions.
 3. Open the settings and search for `path-server` or use the command `Path Server: Open Configuration` to customize the configuration options.
 
@@ -124,6 +124,7 @@ cd extensions/zed
 
 ## TODO
 - [x] Support relative and absolute path completion.
+- [x] Support customizable configurations.
 - [ ] Automatically trigger next completion.
 - [ ] Support configurations.
 - [ ] Implement "Go to Definition" for file paths.

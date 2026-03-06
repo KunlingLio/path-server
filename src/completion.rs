@@ -239,7 +239,105 @@ async fn complete_relative(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
+    #[tokio::test]
+    async fn test_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        // workspace + files
+        std::fs::create_dir_all(root.join("data")).unwrap();
+        std::fs::File::create(root.join("data").join("a.txt")).unwrap();
+        std::fs::File::create(root.join("data").join("b.log")).unwrap();
+
+        let mut roots = HashSet::new();
+        roots.insert(root.to_path_buf());
+        let current_file = root.join("src").join("main.rs");
+        std::fs::create_dir_all(current_file.parent().unwrap()).unwrap();
+        std::fs::File::create(&current_file).unwrap();
+
+        let completion_config = crate::config::Completion {
+            max_results: 1,
+            show_hidden_files: true,
+            exclude: vec!["*.log".into()],
+            base_path: vec!["${workspaceFolder}".into()],
+        };
+
+        let items = complete("./data/a", &roots, &current_file, &completion_config)
+            .await
+            .unwrap();
+
+        // only "a.txt": "b.log" is excluded and max_results = 1
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].label, "a.txt");
+    }
+
+    #[tokio::test]
+    async fn test_filter() {
+        // test filter duplicate and exclude
+        let items = vec![
+            lsp_types::CompletionItem {
+                label: "keep.txt".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "ignore.log".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "keep.txt".into(),
+                ..Default::default()
+            }, // duplicate
+        ];
+        let filtered = filter(items, 0, &vec!["*.log".into()]).await;
+        // should drop ".log", dedupe
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].label, "keep.txt");
+
+        // test cap at max results
+        let items = vec![
+            lsp_types::CompletionItem {
+                label: "1.txt".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "2.log".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "3.txt".into(),
+                ..Default::default()
+            }, // duplicate
+        ];
+        let filtered = filter(items, 1, &vec![]).await;
+        // should cap at 1
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].label, "1.txt");
+    }
+
+    #[tokio::test]
+    async fn test_expand_tilde() {
+        // test with HOME env
+        let dir = tempfile::tempdir().unwrap();
+        unsafe {
+            env::set_var("HOME", dir.path());
+        }
+
+        let result = expand_tilde("~/projects").unwrap();
+        assert_eq!(result, format!("{}/projects", dir.path().display()));
+        let result = expand_tilde("/path/without/tilde");
+        assert_eq!(result.unwrap(), "/path/without/tilde".to_string());
+
+        // test without HOME env
+        unsafe {
+            env::remove_var("HOME");
+        }
+        let result = expand_tilde("~/projects");
+        assert!(result.is_err());
+    }
+
+    // TODO: test show_hidden_file param
     #[tokio::test]
     async fn test_complete_absolute() {
         // prepare a temporary directory structure
@@ -259,6 +357,7 @@ mod tests {
         assert!(labels.contains(&"app_dir".to_string()));
     }
 
+    // TODO: test show_hidden_file param
     #[tokio::test]
     async fn test_complete_relative() {
         // prepare workspace root with a subdir
