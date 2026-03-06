@@ -20,7 +20,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct PathServer {
     client: tower_lsp::Client,
     workspace_roots: RwLock<HashSet<PathBuf>>,
-    /// url -> document
+    /// file path -> document
     documents: Mutex<HashMap<PathBuf, Document>>,
     /// To override configuration from lsp client
     config_override: RwLock<Option<config::Config>>,

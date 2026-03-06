@@ -1,7 +1,8 @@
 mod utils;
-use path_server::config;
-use tower_lsp::lsp_types;
+use path_server::{Completion, Config};
 use utils::*;
+
+use tower_lsp::lsp_types;
 
 /// test config.completion.maxResults
 #[tokio::test]
@@ -14,14 +15,14 @@ async fn test_config_max_results_limits_items() {
     }
     harness.create_file("src/main.rs");
 
-    let completion_cfg = config::Completion {
+    let completion_cfg = Completion {
         max_results: 5,
         show_hidden_files: true,
         exclude: vec![],
         base_path: vec!["${workspaceFolder}".into()],
         trigger_next_completion: true,
     };
-    let cfg = config::Config {
+    let cfg = Config {
         completion: completion_cfg,
     };
     harness.set_config(cfg).await;
@@ -44,14 +45,14 @@ async fn test_config_show_hidden_files_false() {
     harness.create_file("hidden_dir/.secret.txt");
     harness.create_file("src/main.rs");
 
-    let completion_cfg = config::Completion {
+    let completion_cfg = Completion {
         max_results: 0,
         show_hidden_files: false,
         exclude: vec![],
         base_path: vec!["${workspaceFolder}".into()],
         trigger_next_completion: true,
     };
-    let cfg = config::Config {
+    let cfg = Config {
         completion: completion_cfg,
     };
     harness.set_config(cfg).await;
@@ -76,14 +77,14 @@ async fn test_config_exclude() {
     harness.create_file("exclude_dir/ignore.log");
     harness.create_file("src/main.rs");
 
-    let completion_cfg = config::Completion {
+    let completion_cfg = Completion {
         max_results: 0,
         show_hidden_files: true,
         exclude: vec!["*.log".into()],
         base_path: vec!["${workspaceFolder}".into()],
         trigger_next_completion: true,
     };
-    let cfg = config::Config {
+    let cfg = Config {
         completion: completion_cfg,
     };
     harness.set_config(cfg).await;
@@ -108,14 +109,14 @@ async fn test_config_base_path() {
     harness.create_file("alt/data/config.json");
     harness.create_file("src/main.rs");
 
-    let completion_cfg = config::Completion {
+    let completion_cfg = Completion {
         max_results: 0,
         show_hidden_files: true,
         exclude: vec![],
         base_path: vec!["${workspaceFolder}/alt".into()],
         trigger_next_completion: true,
     };
-    let cfg = config::Config {
+    let cfg = Config {
         completion: completion_cfg,
     };
     harness.set_config(cfg).await;
@@ -140,7 +141,7 @@ async fn test_config_trigger_next_completion() {
     harness.create_file("dir/file1");
     harness.create_file("dir/file2");
 
-    let cfg_with = config::Completion {
+    let cfg_with = Completion {
         max_results: 0,
         show_hidden_files: true,
         exclude: vec![],
@@ -148,7 +149,7 @@ async fn test_config_trigger_next_completion() {
         trigger_next_completion: true,
     };
     harness
-        .set_config(config::Config {
+        .set_config(Config {
             completion: cfg_with,
         })
         .await;
@@ -171,7 +172,7 @@ async fn test_config_trigger_next_completion() {
     );
 
     // test trigger_next_completion == false
-    let cfg_without = config::Completion {
+    let cfg_without = Completion {
         max_results: 0,
         show_hidden_files: true,
         exclude: vec![],
@@ -179,7 +180,7 @@ async fn test_config_trigger_next_completion() {
         trigger_next_completion: false,
     };
     harness
-        .set_config(config::Config {
+        .set_config(Config {
             completion: cfg_without,
         })
         .await;
