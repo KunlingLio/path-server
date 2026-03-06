@@ -185,7 +185,7 @@ async fn complete_absolute(
 }
 
 async fn complete_relative(
-    base_dir: &PathBuf,
+    base_dir: &Path,
     partial_name: &str,
     root: &Path,
     show_hidden_files: bool,
@@ -337,7 +337,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // TODO: test show_hidden_file param
     #[tokio::test]
     async fn test_complete_absolute() {
         // prepare a temporary directory structure
@@ -357,7 +356,48 @@ mod tests {
         assert!(labels.contains(&"app_dir".to_string()));
     }
 
-    // TODO: test show_hidden_file param
+    #[tokio::test]
+    async fn test_complete_absolute_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+
+        std::fs::create_dir(base.join("a_dir")).unwrap();
+        std::fs::File::create(base.join("a_dir").join("visible_file.txt")).unwrap();
+        std::fs::File::create(base.join("a_dir").join("hidden_file.txt")).unwrap();
+        hf::hide(base.join("a_dir").join("hidden_file.txt")).unwrap();
+        let hidden_filepath = if cfg!(unix) {
+            hf::unix::hidden_file_name(base.join("a_dir").join("hidden_file.txt"))
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        } else {
+            "hidden_file.txt".to_string()
+        };
+        let hidden_filename = std::path::PathBuf::from(&hidden_filepath)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert!(base.join("a_dir").join(&hidden_filepath).exists());
+        assert!(hf::is_hidden(base.join("a_dir").join(&hidden_filepath)).unwrap());
+
+        // complete without showing hidden files
+        let abs_results = complete_absolute(&base.to_path_buf().join("a_dir"), "", false)
+            .await
+            .unwrap();
+        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        assert!(labels.contains(&"visible_file.txt".to_string()));
+        assert!(!labels.contains(&hidden_filepath));
+
+        // complete with showing hidden files
+        let abs_results = complete_absolute(&base.to_path_buf().join("a_dir"), "", true)
+            .await
+            .unwrap();
+        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        assert!(labels.contains(&"visible_file.txt".to_string()));
+        assert!(labels.contains(&hidden_filename));
+    }
+
     #[tokio::test]
     async fn test_complete_relative() {
         // prepare workspace root with a subdir
@@ -384,5 +424,47 @@ mod tests {
             }
         }
         assert!(found_file && found_dir);
+    }
+
+    #[tokio::test]
+    async fn test_complete_relative_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path();
+
+        std::fs::create_dir(base.join("a_dir")).unwrap();
+        std::fs::File::create(base.join("a_dir").join("visible_file.txt")).unwrap();
+        std::fs::File::create(base.join("a_dir").join("hidden_file.txt")).unwrap();
+        hf::hide(base.join("a_dir").join("hidden_file.txt")).unwrap();
+        let hidden_filepath = if cfg!(unix) {
+            hf::unix::hidden_file_name(base.join("a_dir").join("hidden_file.txt"))
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        } else {
+            "hidden_file.txt".to_string()
+        };
+        let hidden_filename = std::path::PathBuf::from(&hidden_filepath)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert!(base.join("a_dir").join(&hidden_filepath).exists());
+        assert!(hf::is_hidden(base.join("a_dir").join(&hidden_filepath)).unwrap());
+
+        // complete without showing hidden files
+        let abs_results = complete_relative(&PathBuf::from("./a_dir"), "", base, false)
+            .await
+            .unwrap();
+        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        assert!(labels.contains(&"visible_file.txt".to_string()));
+        assert!(!labels.contains(&hidden_filepath));
+
+        // complete with showing hidden files
+        let abs_results = complete_relative(&PathBuf::from("./a_dir"), "", base, true)
+            .await
+            .unwrap();
+        let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
+        assert!(labels.contains(&"visible_file.txt".to_string()));
+        assert!(labels.contains(&hidden_filename));
     }
 }
