@@ -26,6 +26,12 @@ pub async fn debug(message: String) {
     }
 }
 
+pub fn debug_sync(message: String) {
+    tokio::spawn(async move {
+        debug(message).await;
+    });
+}
+
 pub async fn log(message: String) {
     if cfg!(test) {
         eprintln!("[LOG] {}", message);

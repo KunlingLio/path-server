@@ -214,7 +214,7 @@ async fn generate_completions(
     ))
     .await?
     .into_iter()
-    .filter(|x| x.is_some())
+    .filter(Option::is_some)
     .map(|x| x.unwrap())
     .collect();
     Ok(completions)

@@ -289,7 +289,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        let links = providers::link::provide_document_links(doc)?;
+        let links = providers::link::provide_document_links(doc).await?;
         debug(format!("Generated document links: {}", links.len())).await;
         Ok(Some(links))
     }
@@ -324,7 +324,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        let definition = providers::definition::provide_definition(doc, line, character)?;
+        let definition = providers::definition::provide_definition(doc, line, character).await?;
         Ok(definition)
     }
 }
