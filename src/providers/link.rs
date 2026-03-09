@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use futures::future;
 use tower_lsp::lsp_types;
@@ -6,22 +6,36 @@ use tower_lsp::lsp_types;
 use crate::async_fs;
 use crate::common::*;
 use crate::document::Document;
-use crate::logger::debug;
+use crate::logger::*;
 use crate::parser::{PathCandidate, parse_document};
 
+/// Based on document url for now.
+/// TODO: support configurable base url
 pub async fn provide_document_links(
     doc: &Document,
+    doc_path: &Path,
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
-    crate::logger::debug("@@@".into()).await;
     let tokens: Vec<(PathCandidate, PathBuf)> = future::join_all(
         parse_document(doc)
             .into_iter()
             .map(|candidates| async move {
                 for candidate in candidates {
-                    debug(format!("Checking candidate: {}", candidate.content)).await;
                     let path = PathBuf::from(&candidate.content);
-                    if async_fs::exists(&path).await {
-                        return Some((candidate, path));
+                    if path.is_absolute() {
+                        if async_fs::exists(&path).await {
+                            return Some((candidate, path));
+                        }
+                    } else if path.is_relative() {
+                        let Some(base_path) = doc_path.parent() else {
+                            warn(format!("Failed to get parent directory of {}, give up provide document links.", doc_path.display())).await;
+                            continue;
+                        };
+                        let full_path = base_path.join(&path);
+                        if async_fs::exists(&full_path).await {
+                            return Some((candidate, full_path));
+                        }
+                    } else {
+                        unreachable!();
                     }
                 }
                 None
@@ -32,8 +46,6 @@ pub async fn provide_document_links(
     .filter(Option::is_some)
     .map(|x| x.unwrap())
     .collect();
-
-    debug(format!("Tokens: {}", tokens.len())).await;
 
     let mut links = vec![];
     for token in tokens {

@@ -9,7 +9,6 @@ use super::extractor::extract_string;
 
 pub fn parse_document(document: &Document) -> Vec<Vec<PathCandidate>> {
     let strings = extract_string(document);
-    debug_sync(format!("Extracted strings count: {}", strings.len()));
     extract_string(document)
         .into_iter()
         .map(|s| extract_paths_from_string(s))
@@ -42,7 +41,6 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
             });
         }
     }
-    debug_sync(format!("Extracted path candidates: {:?}", results));
 
     results
 }

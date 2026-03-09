@@ -275,6 +275,11 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::DocumentLinkParams,
     ) -> jsonrpc::Result<Option<Vec<lsp_types::DocumentLink>>> {
+        debug(format!(
+            "Processing document link request for: {}",
+            params.text_document.uri
+        ))
+        .await;
         let Ok(path) = url_to_path(&params.text_document.uri) else {
             warn(format!(
                 "Failed to convert URI to file path: {}",
@@ -289,7 +294,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        let links = providers::link::provide_document_links(doc).await?;
+        let links = providers::link::provide_document_links(doc, &path).await?;
         debug(format!("Generated document links: {}", links.len())).await;
         Ok(Some(links))
     }
