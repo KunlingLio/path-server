@@ -28,5 +28,10 @@ async fn test_document_link_integration() {
     let expected = tokio::fs::canonicalize(harness.root_path().join("data/linked.txt"))
         .await
         .unwrap();
-    assert_eq!(target_url.to_file_path().unwrap(), expected);
+    assert_eq!(
+        tokio::fs::canonicalize(&target_url.to_file_path().unwrap())
+            .await
+            .unwrap(),
+        expected
+    );
 }

@@ -35,7 +35,12 @@ async fn test_goto_definition_integration() {
             let expected = tokio::fs::canonicalize(harness.root_path().join("docs/config.json"))
                 .await
                 .unwrap();
-            assert_eq!(loc.uri.to_file_path().unwrap(), expected);
+            assert_eq!(
+                tokio::fs::canonicalize(&loc.uri.to_file_path().unwrap())
+                    .await
+                    .unwrap(),
+                expected
+            );
         }
         _ => panic!("Expected scalar location"),
     }

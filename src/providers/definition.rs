@@ -26,7 +26,10 @@ pub async fn provide_definition(
                 let path = PathBuf::from(&candidate.content);
                 if path.is_absolute() {
                     if fs::exists(&path).await {
-                        return PathServerResult::Ok(Some((candidate, path)));
+                        return PathServerResult::Ok(Some((
+                            candidate,
+                            tokio::fs::canonicalize(path).await?,
+                        )));
                     }
                 } else if path.is_relative() {
                     let Some(base_path) = doc_path.parent() else {
@@ -114,7 +117,12 @@ mod tests {
         assert!(res.is_some());
         match res.unwrap() {
             lsp_types::GotoDefinitionResponse::Scalar(loc) => {
-                assert_eq!(loc.uri.to_file_path().unwrap(), target);
+                assert_eq!(
+                    tokio::fs::canonicalize(&loc.uri.to_file_path().unwrap())
+                        .await
+                        .unwrap(),
+                    tokio::fs::canonicalize(&target).await.unwrap()
+                );
             }
             _ => panic!("Expected scalar location"),
         }
@@ -150,7 +158,12 @@ mod tests {
             lsp_types::GotoDefinitionResponse::Scalar(loc) => {
                 // normalize expected path to match canonicalized result
                 let expected = tokio::fs::canonicalize(&target).await.unwrap();
-                assert_eq!(loc.uri.to_file_path().unwrap(), expected);
+                assert_eq!(
+                    tokio::fs::canonicalize(&loc.uri.to_file_path().unwrap())
+                        .await
+                        .unwrap(),
+                    expected
+                );
             }
             _ => panic!("Expected scalar location"),
         }

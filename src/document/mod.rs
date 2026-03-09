@@ -58,7 +58,7 @@ impl Document {
         let old_end_byte =
             self.utf16_pos_to_offset(range.end.line as usize, range.end.character as usize)?;
         let new_end_byte = start_byte + change.text.len();
-        let mut old_document = std::mem::replace(self, Self::default());
+        let mut old_document = std::mem::take(self);
 
         // construct new self with updated text and index, but old tree
         let mut new_text = std::mem::take(&mut old_document.text);

@@ -198,7 +198,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return;
         };
         let mut docs = self.documents.write().await;
-        let doc = docs.entry(path).or_insert_with(|| Document::default());
+        let doc = docs.entry(path).or_insert_with(Document::default);
         // apply each change in order
         for change in params.content_changes.into_iter() {
             let result = doc.apply_change(&change);

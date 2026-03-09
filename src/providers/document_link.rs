@@ -23,7 +23,7 @@ pub async fn provide_document_links(
                     let path = PathBuf::from(&candidate.content);
                     if path.is_absolute() {
                         if fs::exists(&path).await {
-                            return PathServerResult::Ok(Some((candidate, path)));
+                            return PathServerResult::Ok(Some((candidate, tokio::fs::canonicalize(path).await?)));
                         }
                     } else if path.is_relative() {
                         let Some(base_path) = doc_path.parent() else {
@@ -120,6 +120,11 @@ mod tests {
         assert_eq!(links.len(), 1);
         let url = links[0].target.as_ref().unwrap();
         let expected = tokio::fs::canonicalize(&target).await.unwrap();
-        assert_eq!(url.to_file_path().unwrap(), expected);
+        assert_eq!(
+            tokio::fs::canonicalize(&url.to_file_path().unwrap())
+                .await
+                .unwrap(),
+            expected
+        );
     }
 }
