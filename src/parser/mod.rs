@@ -50,9 +50,9 @@ impl PathCandidate {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.content.len()
-    }
+    // pub fn len(&self) -> usize {
+    //     self.content.len()
+    // }
 
     /// Trim the space from both begin and end
     pub fn trim(&self) -> PathCandidate {
