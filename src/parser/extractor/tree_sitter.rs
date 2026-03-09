@@ -1,5 +1,6 @@
 use crate::document::{Document, Language};
 use crate::error::*;
+use crate::logger::debug_sync;
 
 use super::super::PathCandidate;
 
@@ -87,6 +88,7 @@ fn extract_strings_recursive(
     if is_string_node(node, language)
         && let Some(literal) = extract_string_content(source, node)
     {
+        debug_sync(format!("Extracted: {}", literal.content));
         strings.push(literal);
     }
 
@@ -102,13 +104,9 @@ fn extract_strings_recursive(
 fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
     let kind = node.kind();
     match language {
-        Language::javascript | Language::typescript => {
-            kind == "string" || kind == "template_string"
-        }
-        Language::python => kind == "string",
-        Language::rust => kind == "string_literal",
-        Language::markdown => kind == "code_span" || kind == "inline_code",
-        Language::html => kind == "attribute_value" || kind == "text",
+        Language::javascript | Language::typescript => kind == "string_fragment",
+        Language::python => kind == "string_content",
+        Language::rust => kind == "string_content",
         _ => false,
     }
 }
@@ -126,4 +124,4 @@ fn extract_string_content(source: &str, node: &tree_sitter::Node) -> Option<Path
     })
 }
 
-// TODO: tree-sitter-javascript tree-sitter-typescript tree-sitter-python tree-sitter-rust tree-sitter-markdown tree-sitter-html
+// TODO: tree-sitter-markdown tree-sitter-html

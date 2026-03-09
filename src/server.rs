@@ -272,13 +272,9 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
         let workspace_roots = self.workspace_roots.read().await;
-        let completions = providers::completion::complete(
-            &raw_path,
-            &workspace_roots,
-            &file_path,
-            &completion_config,
-        )
-        .await?;
+        let completions =
+            providers::complete(&raw_path, &workspace_roots, &file_path, &completion_config)
+                .await?;
         debug(format!(
             "<Completion> Generated completions: {}",
             completions.len()
@@ -311,7 +307,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        let links = providers::link::provide_document_links(doc, &path).await?;
+        let links = providers::provide_document_links(doc, &path).await?;
         debug(format!(
             "<Document Link> Generated document links: {}",
             links.len()
@@ -350,8 +346,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        let definition =
-            providers::definition::provide_definition(doc, line, character, &path).await?;
+        let definition = providers::provide_definition(doc, line, character, &path).await?;
         if let Some(definition) = &definition {
             let lsp_types::GotoDefinitionResponse::Scalar(definition) = &definition else {
                 unreachable!("Definition is not a scalar");

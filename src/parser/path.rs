@@ -19,24 +19,16 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
     let mut results = Vec::new();
     let content = &path_ref.content;
 
-    // 1. 如果整个字符串包含路径分隔符，直接作为最高优先级候选
+    // 1. whole string is a path or not
     if content.contains('/') || content.contains('\\') {
         results.push(path_ref.clone());
     }
 
-    // 2. try to trim quote
-    results.push(path_ref.clone().slice(1, path_ref.len() - 1));
-
-    // 2. 将内部按空格或特定符号拆分，进一步提取子路径并作为次备选
-    // 这里可以结合你之前 inline.rs 的逻辑
+    // 2. the part of string (split by space) is a path or not
     if let Some(pos) = content.rfind(' ') {
         let sub_content = &content[pos + 1..];
         if sub_content.contains('/') || sub_content.contains('\\') {
-            results.push(PathCandidate {
-                content: sub_content.to_string(),
-                start_byte: path_ref.start_byte + pos + 1,
-                end_byte: path_ref.end_byte,
-            });
+            results.push(path_ref.slice(pos + 1, path_ref.len()));
         }
     }
 
