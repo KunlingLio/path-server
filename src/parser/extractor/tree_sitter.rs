@@ -123,10 +123,8 @@ fn extract_strings_recursive(
 ) -> Vec<PathCandidate> {
     let mut strings = Vec::new();
     // Check if this node is a string
-    if is_string_node(node, language)
-        && let Some(literal) = extract_string_content(source, node)
-    {
-        strings.push(literal);
+    if is_string_node(node, language) {
+        strings.extend(extract_string_content(source, node, language));
     }
 
     // Recursively process children
@@ -137,8 +135,65 @@ fn extract_strings_recursive(
     strings
 }
 
+fn extract_string_content(
+    source: &str,
+    node: &tree_sitter::Node,
+    language: &Language,
+) -> Vec<PathCandidate> {
+    let mut candidates = Vec::new();
+    let mut cursor = node.walk();
+    let mut begin_byte = node.start_byte();
+    for child in node.children(&mut cursor) {
+        if is_string_fragment_node(&child, language) {
+            continue;
+        } else if !is_escaped_character_node(&child, language) {
+            // is not a string fragment or escaped character, treat it as a separator
+            // the content before it is a candidate
+            if child.start_byte() > begin_byte {
+                // only add candidate if there is content before the separator
+                let candidate = PathCandidate {
+                    content: source
+                        .get(begin_byte..child.start_byte())
+                        .unwrap_or("")
+                        .to_string(),
+                    start_byte: begin_byte,
+                    end_byte: child.start_byte(),
+                };
+                candidates.push(candidate);
+            }
+            begin_byte = child.end_byte();
+        }
+    }
+    // add the last candidate after the last fragment
+    if begin_byte < node.end_byte() {
+        let candidate = PathCandidate {
+            content: source
+                .get(begin_byte..node.end_byte())
+                .unwrap_or("")
+                .to_string(),
+            start_byte: begin_byte,
+            end_byte: node.end_byte(),
+        };
+        candidates.push(candidate);
+    }
+    candidates
+}
+
 /// Determine if a node represents a string literal
 fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
+    let kind = node.kind();
+    match language {
+        Language::javascript | Language::typescript => {
+            kind == "string" || kind == "template_string"
+        }
+        Language::python => kind == "string",
+        Language::rust => kind == "string_literal" || kind == "raw_string_literal",
+        _ => false,
+    }
+}
+
+/// Determine if a node represents a part of string literal
+fn is_string_fragment_node(node: &tree_sitter::Node, language: &Language) -> bool {
     let kind = node.kind();
     match language {
         Language::javascript | Language::typescript => kind == "string_fragment",
@@ -148,17 +203,16 @@ fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
     }
 }
 
-/// Extract content from a string node
-fn extract_string_content(source: &str, node: &tree_sitter::Node) -> Option<PathCandidate> {
-    let start_byte = node.start_byte();
-    let end_byte = node.end_byte();
-    let content = source.get(start_byte..end_byte).unwrap_or("").to_string();
-
-    Some(PathCandidate {
-        content,
-        start_byte,
-        end_byte,
-    })
+/// Determine if a node represents an escaped character in a string
+/// This will be included in the path candidate
+fn is_escaped_character_node(node: &tree_sitter::Node, language: &Language) -> bool {
+    let kind = node.kind();
+    match language {
+        Language::javascript | Language::typescript => kind == "escape_sequence",
+        Language::python => kind == "escape_sequence",
+        Language::rust => kind == "escape_sequence",
+        _ => false,
+    }
 }
 
 // TODO: tree-sitter-markdown tree-sitter-html
@@ -225,6 +279,7 @@ mod tests {
 
     #[test]
     fn test_javascript_extract_strings() {
+        // normal string
         let normal_src = r#"const tpl = "hello world";"#;
         print_tree(&Language::javascript, normal_src);
         let res = parse_and_extract(Language::javascript, normal_src);
@@ -232,6 +287,7 @@ mod tests {
             res.iter().any(|c| c.content.contains("hello world")),
             "missing 'hello world' fragment"
         );
+        // template string with interpolation
         let template_src = r#"const tpl = `hello ${name} world`;"#;
         print_tree(&Language::javascript, template_src);
         let res = parse_and_extract(Language::javascript, template_src);
@@ -243,10 +299,19 @@ mod tests {
             res.iter().any(|c| c.content.contains(" world")),
             "missing ' world' fragment"
         );
+        // string with escaped characters
+        let escape_src = r#"const s = "line1\\line2";"#;
+        print_tree(&Language::javascript, escape_src);
+        let res = parse_and_extract(Language::javascript, escape_src);
+        assert!(
+            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            "missing 'line1\\\\line2' with escaped newline"
+        );
     }
 
     #[test]
     fn test_typescript_extract_string() {
+        // normal string
         let normal_src = r#"const tpl: string = "hello world";"#;
         print_tree(&Language::typescript, normal_src);
         let res = parse_and_extract(Language::typescript, normal_src);
@@ -254,6 +319,7 @@ mod tests {
             res.iter().any(|c| c.content.contains("hello world")),
             "missing 'hello world' fragment"
         );
+        // template string with interpolation
         let template_src = r#"const tpl: string = `ts ${val} end`;"#;
         print_tree(&Language::typescript, template_src);
         let res = parse_and_extract(Language::typescript, template_src);
@@ -265,10 +331,19 @@ mod tests {
             res.iter().any(|c| c.content.contains(" end")),
             "missing ' end' fragment"
         );
+        // string with escaped characters
+        let escape_src = r#"const s: string = "line1\\line2";"#;
+        print_tree(&Language::typescript, escape_src);
+        let res = parse_and_extract(Language::typescript, escape_src);
+        assert!(
+            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            "missing 'line1\\\\line2' with escaped newline"
+        );
     }
 
     #[test]
     fn test_python_extract_strings() {
+        // normal string with single, double, and triple quotes
         let normal_src = r#"
         s = "hello"
         t = 'world'
@@ -289,12 +364,21 @@ mod tests {
                 .any(|c| c.content.trim().contains(r#"multi\nline"#)),
             "missing 'multi\nline' in triple-quoted string"
         );
+        // f-string
         let f_string_src = r#"s = f"hello {name}""#;
         print_tree(&Language::python, f_string_src);
         let res = parse_and_extract(Language::python, f_string_src);
         assert!(
             res.iter().any(|c| c.content.contains("hello")),
             "missing 'hello' in f-string"
+        );
+        // string with escaped characters
+        let escape_src = r#"s = "line1\\line2""#;
+        print_tree(&Language::python, escape_src);
+        let res = parse_and_extract(Language::python, escape_src);
+        assert!(
+            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            "missing 'line1\\\\line2' with escaped newline"
         );
     }
 
@@ -310,6 +394,13 @@ mod tests {
         assert!(
             res.iter().any(|c| c.content.contains("raw content")),
             "missing raw string content"
+        );
+        let escaped_src = "let s = \"line1\\\\nline2\";";
+        print_tree(&Language::rust, escaped_src);
+        let res = parse_and_extract(Language::rust, escaped_src);
+        assert!(
+            res.iter().any(|c| c.content.contains("line1\\\\nline2")),
+            "missing 'line1\\\\nline2' with escaped newline"
         );
     }
 }
