@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Fixed
+- **Core**: Fix highlight directory issue in editor.
+
 ## [0.4.0] - 2026-03-10
 ### Added
 - **Core**: Support automatically triggering next completion after selecting a completion.

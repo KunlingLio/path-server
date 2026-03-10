@@ -68,10 +68,10 @@ pub async fn filter_exist_path(
     for candidate in candidates {
         let path = PathBuf::from(&candidate.content);
         if path.is_absolute() {
-            if fs::exists(&path).await {
+            if fs::exists(&path).await && !fs::is_dir(&path).await {
                 return PathServerResult::Ok(Some((
                     candidate,
-                    tokio::fs::canonicalize(path).await?,
+                    tokio::fs::canonicalize(&path).await?,
                 )));
             }
         } else if path.is_relative() {
@@ -86,7 +86,7 @@ pub async fn filter_exist_path(
             let home = std::env::var("HOME").ok();
             for base_path in config.base_paths(&workspace_folders, &parent, &home) {
                 let full_path = base_path.join(&path);
-                if fs::exists(&full_path).await {
+                if fs::exists(&full_path).await && !fs::is_dir(&full_path).await {
                     return PathServerResult::Ok(Some((
                         candidate,
                         tokio::fs::canonicalize(&full_path).await?,
