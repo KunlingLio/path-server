@@ -226,7 +226,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let doc = docs.entry(path).or_insert_with(Document::default);
         // apply each change in order
         for change in params.content_changes.into_iter() {
-            let result = doc.apply_change(&change);
+            let result = doc.apply_change(change);
             if let Err(e) = result {
                 error(format!(
                     "Failed to apply change to document {}: {}",

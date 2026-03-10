@@ -49,8 +49,8 @@ impl Config {
     pub fn base_paths(
         &self,
         workspace_folders: &[String],
-        document_parent: &Option<String>,
-        user_home: &Option<String>,
+        document_parent: Option<&String>,
+        user_home: Option<&String>,
     ) -> Vec<PathBuf> {
         let mut expanded_paths = vec![];
         for path in &self.base_path {
@@ -104,7 +104,6 @@ impl TryFrom<serde_json::Value> for Config {
     }
 }
 
-/// Display config in json format with indent = 4
 impl Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -213,10 +212,10 @@ mod tests {
         };
 
         let workspace_folders = vec!["/ws1".to_string(), "/ws2".to_string()];
-        let document_parent = Some("/ws1/project".to_string());
+        let document_parent = Some(&"/ws1/project".to_string());
         let user_home = None;
 
-        let result = config.base_paths(&workspace_folders, &document_parent, &user_home);
+        let result = config.base_paths(&workspace_folders, document_parent, user_home);
 
         let expected: Vec<PathBuf> = vec![
             "/ws1/src".into(),
@@ -243,9 +242,9 @@ mod tests {
 
         let workspace_folders = vec![];
         let document_parent = None;
-        let user_home = Some("/home/user".to_string());
+        let user_home = Some(&"/home/user".to_string());
 
-        let result = config.base_paths(&workspace_folders, &document_parent, &user_home);
+        let result = config.base_paths(&workspace_folders, document_parent, user_home);
 
         let expected: Vec<PathBuf> = vec!["/home/user/foo".into()];
 

@@ -1,14 +1,12 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-
-use futures::future;
 use tower_lsp::lsp_types;
 
 use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
-use crate::fs;
-use crate::parser::{PathCandidate, parse_document};
+
+use super::compute_tokens::get_or_compute_tokens;
 
 pub async fn provide_document_links(
     doc: &Document,
@@ -16,84 +14,31 @@ pub async fn provide_document_links(
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
-    let tokens: Vec<(PathCandidate, PathBuf)> = future::try_join_all(
-        parse_document(doc)
-            .into_iter()
-            .map(|candidates| async move {
-                filter_exist_path(candidates, config, workspace_roots, doc_path).await
-            }),
-    )
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
+    let tokens = get_or_compute_tokens(doc, config, workspace_roots, doc_path).await?;
 
     let mut links = vec![];
-    for token in tokens {
-        let candidate = token.0;
-        let path = token.1;
-        let start = doc.offset_to_utf16_pos(candidate.start_byte)?;
-        let end = doc.offset_to_utf16_pos(candidate.end_byte)?;
+    for token in &*tokens {
         let range = lsp_types::Range::new(
-            lsp_types::Position::new(start.0 as u32, start.1 as u32),
-            lsp_types::Position::new(end.0 as u32, end.1 as u32),
+            lsp_types::Position::new(token.start.0 as u32, token.start.1 as u32),
+            lsp_types::Position::new(token.end.0 as u32, token.end.1 as u32),
         );
 
         links.push(lsp_types::DocumentLink {
             range,
-            target: Some(lsp_types::Url::from_file_path(path.clone()).map_err(|_| {
-                PathServerError::InvalidPath(format!(
-                    "Failed to convert path {} into url",
-                    path.display()
-                ))
-            })?),
+            target: Some(
+                lsp_types::Url::from_file_path(token.target.clone()).map_err(|_| {
+                    PathServerError::InvalidPath(format!(
+                        "Failed to convert path {} into url",
+                        token.target.display()
+                    ))
+                })?,
+            ),
             tooltip: Some("Open file".into()),
             data: None,
         });
     }
 
     Ok(links)
-}
-
-pub async fn filter_exist_path(
-    candidates: Vec<PathCandidate>,
-    config: &Config,
-    workspace_roots: &HashSet<PathBuf>,
-    current_file: &Path,
-) -> PathServerResult<Option<(PathCandidate, PathBuf)>> {
-    for candidate in candidates {
-        let path = PathBuf::from(&candidate.content);
-        if path.is_absolute() {
-            if fs::exists(&path).await && !fs::is_dir(&path).await {
-                return PathServerResult::Ok(Some((
-                    candidate,
-                    tokio::fs::canonicalize(&path).await?,
-                )));
-            }
-        } else if path.is_relative() {
-            let workspace_folders = workspace_roots
-                .iter()
-                .map(|p| p.to_string_lossy().into_owned())
-                .collect::<Vec<_>>();
-            let parent = current_file
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned());
-            // TODO: optimize env syscall frequency
-            let home = std::env::var("HOME").ok();
-            for base_path in config.base_paths(&workspace_folders, &parent, &home) {
-                let full_path = base_path.join(&path);
-                if fs::exists(&full_path).await && !fs::is_dir(&full_path).await {
-                    return PathServerResult::Ok(Some((
-                        candidate,
-                        tokio::fs::canonicalize(&full_path).await?,
-                    )));
-                }
-            }
-        } else {
-            unreachable!();
-        }
-    }
-    Ok(None)
 }
 
 #[cfg(test)]

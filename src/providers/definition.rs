@@ -1,16 +1,15 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use futures::future;
 use tower_lsp::lsp_types;
 
 use crate::Config;
 use crate::document::Document;
+use crate::document::PathToken;
 use crate::error::*;
 use crate::logger::*;
-use crate::parser::{PathCandidate, parse_document};
 
-use super::document_link::filter_exist_path;
+use super::compute_tokens::get_or_compute_tokens;
 
 pub async fn provide_definition(
     doc: &Document,
@@ -20,20 +19,12 @@ pub async fn provide_definition(
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Option<lsp_types::GotoDefinitionResponse>> {
-    let cursor_offset = doc.utf16_pos_to_offset(line, character)?;
-    // gather all string tokens, a very slow implement
-    // TODO: optimize performance
-    let tokens = future::try_join_all(parse_document(doc).into_iter().map(
-        |candidates| async move {
-            filter_exist_path(candidates, config, workspace_roots, doc_path).await
-        },
-    ))
-    .await?
-    .into_iter()
-    .flatten();
+    let tokens = get_or_compute_tokens(doc, config, workspace_roots, doc_path).await?;
 
-    let current_token: Vec<(PathCandidate, PathBuf)> = tokens
-        .filter(|token| cursor_offset >= token.0.start_byte && cursor_offset < token.0.end_byte)
+    let current_token: Vec<&PathToken> = tokens
+        .as_ref()
+        .iter()
+        .filter(|token| cursor_inside(line, character, token))
         .collect();
 
     if current_token.is_empty() {
@@ -45,22 +36,40 @@ pub async fn provide_definition(
     }
 
     let current_token = current_token[0].clone();
-    let Ok(url) = lsp_types::Url::from_file_path(&current_token.1) else {
+    let Ok(url) = lsp_types::Url::from_file_path(&current_token.target) else {
         warn(format!(
             "Failed to convert path to URL: {}",
-            current_token.1.display()
+            current_token.target.display()
         ))
         .await;
         return Ok(None);
     };
-    let (line, character) = doc.offset_to_utf16_pos(current_token.0.start_byte)?;
-    let start = lsp_types::Position::new(line as u32, character as u32);
-    let (line, character) = doc.offset_to_utf16_pos(current_token.0.end_byte)?;
-    let end = lsp_types::Position::new(line as u32, character as u32);
+    let start =
+        lsp_types::Position::new(current_token.start.0 as u32, current_token.start.1 as u32);
+    let end = lsp_types::Position::new(current_token.end.0 as u32, current_token.end.1 as u32);
 
     Ok(Some(lsp_types::GotoDefinitionResponse::Scalar(
         lsp_types::Location::new(url, lsp_types::Range::new(start, end)),
     )))
+}
+
+fn cursor_inside(cursor_line: usize, cursor_character: usize, token: &PathToken) -> bool {
+    let (start_line, start_character) = token.start;
+    let (end_line, end_character) = token.end;
+    if cursor_line > start_line || cursor_line < end_line {
+        return false;
+    };
+    if cursor_line < start_line && cursor_line > end_line {
+        return true;
+    };
+    // cursor is in the same line of start or end
+    if cursor_line == start_line {
+        cursor_character >= start_character
+    } else if cursor_line == end_line {
+        cursor_character < end_character
+    } else {
+        unreachable!();
+    }
 }
 
 #[cfg(test)]

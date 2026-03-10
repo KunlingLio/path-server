@@ -10,6 +10,7 @@ All notable changes to the Path Server will be documented in this file.
 - **Core**: Improve log messages for better readability.
 - **Core**: Add configuration cache to avoid frequent polling.
 - **Core**: Support partial config merging, now user can override one single setting rather than provide the entire configuration.
+- **Core**: Improve performance distinctively by adding tokens cache.
 
 ## [0.4.0] - 2026-03-10
 ### Added

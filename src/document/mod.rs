@@ -1,7 +1,11 @@
 mod language;
 pub use language::Language;
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use line_index::{LineIndex, TextSize, WideEncoding, WideLineCol};
+use tokio::sync::Mutex;
 use tower_lsp::lsp_types;
 use tree_sitter::Tree;
 
@@ -9,11 +13,20 @@ use crate::error::*;
 use crate::parser::{new_tree, update_tree};
 
 #[derive(Debug, Clone)]
+pub struct PathToken {
+    pub start: (usize, usize), // (line, character) in utf16
+    pub end: (usize, usize),   // (line, character) in utf16
+    pub target: PathBuf,
+}
+
+#[derive(Debug)]
 pub struct Document {
     /// Raw text
     pub text: String,
     /// Language if from lsp client
     pub language: Language,
+    /// Tokens cache
+    pub tokens: Arc<Mutex<Option<Arc<Vec<PathToken>>>>>,
     /// Index for line/column -> offset calculations
     index: LineIndex,
     /// Tree-sitter AST tree for incremental parsing
@@ -27,6 +40,7 @@ impl Default for Document {
             index: LineIndex::new(""),
             language: Language::Unknown("".into()),
             tree: None,
+            tokens: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -38,6 +52,7 @@ impl Document {
             index: LineIndex::new(&text),
             language: Language::from_id(language_id),
             tree: None,
+            tokens: Arc::new(Mutex::new(None)),
         };
         doc.tree = new_tree(&doc)?;
         Ok(doc)
@@ -45,11 +60,11 @@ impl Document {
 
     pub fn apply_change(
         &mut self,
-        change: &lsp_types::TextDocumentContentChangeEvent,
+        change: lsp_types::TextDocumentContentChangeEvent,
     ) -> PathServerResult<()> {
         // TODO: optimize performance by lazy refresh index and tree
         if change.range.is_none() {
-            *self = Self::new(change.text.clone(), &self.language.to_string())?;
+            *self = Self::new(change.text, &self.language.to_string())?;
             return Ok(());
         }
         let range = change.range.as_ref().unwrap();
@@ -69,6 +84,7 @@ impl Document {
             index: new_index,
             tree: None,
             language: old_document.language.clone(),
+            tokens: Arc::new(Mutex::new(None)),
         };
 
         // update tree
@@ -271,7 +287,7 @@ World"#;
             text: "New second line: 也包含中文\n".to_string(),
         };
 
-        doc.apply_change(&change).unwrap();
+        doc.apply_change(change).unwrap();
         assert_eq!(
             doc.get_line(1, None).unwrap(),
             "New second line: 也包含中文\n"
@@ -288,7 +304,7 @@ World"#;
             range_length: None,
             text: "New beginning\nAnother line\n".to_string(),
         };
-        doc.apply_change(&full).unwrap();
+        doc.apply_change(full).unwrap();
         assert_eq!(doc.text, "New beginning\nAnother line\n");
     }
 }
