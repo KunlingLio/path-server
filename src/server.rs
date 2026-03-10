@@ -266,7 +266,7 @@ impl tower_lsp::LanguageServer for PathServer {
         .await;
 
         // completion
-        let completion_config = self.get_config().await.completion;
+        let config = self.get_config().await;
         let Ok(file_path) = url_to_path(&params.text_document_position.text_document.uri) else {
             warn(format!(
                 "Failed to convert URI to file path: {}",
@@ -277,8 +277,7 @@ impl tower_lsp::LanguageServer for PathServer {
         };
         let workspace_roots = self.workspace_roots.read().await;
         let completions =
-            providers::complete(&raw_path, &workspace_roots, &file_path, &completion_config)
-                .await?;
+            providers::complete(&raw_path, &workspace_roots, &file_path, &config).await?;
         debug(format!(
             "<Completion> Generated completions: {}",
             completions.len()
