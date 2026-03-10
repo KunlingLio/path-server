@@ -5,6 +5,7 @@ All notable changes to the Path Server will be documented in this file.
 ## [Unreleased]
 ### Fixed
 - **Core**: Fix highlight directory issue in editor.
+- **Core**: Fix "Go to Definition" functionality.
 
 ### Improved
 - **Core**: Improve log messages for better readability.

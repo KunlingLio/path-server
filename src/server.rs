@@ -397,12 +397,12 @@ impl tower_lsp::LanguageServer for PathServer {
             providers::provide_definition(doc, &path, line, character, &config, &workspace_roots)
                 .await?;
         if let Some(definition) = &definition {
-            let lsp_types::GotoDefinitionResponse::Scalar(definition) = &definition else {
-                unreachable!("Definition is not a scalar");
+            let lsp_types::GotoDefinitionResponse::Link(definition) = &definition else {
+                unreachable!("Definition is not a link");
             };
             info(format!(
                 "[Goto Definition] Generated definition to: {}",
-                definition.uri
+                definition[0].target_uri
             ))
             .await;
             debug(format!(

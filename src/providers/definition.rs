@@ -44,13 +44,25 @@ pub async fn provide_definition(
         .await;
         return Ok(None);
     };
-    let start =
+    let origin_start =
         lsp_types::Position::new(current_token.start.0 as u32, current_token.start.1 as u32);
-    let end = lsp_types::Position::new(current_token.end.0 as u32, current_token.end.1 as u32);
+    let origin_end =
+        lsp_types::Position::new(current_token.end.0 as u32, current_token.end.1 as u32);
+    let origin_range = lsp_types::Range::new(origin_start, origin_end);
 
-    Ok(Some(lsp_types::GotoDefinitionResponse::Scalar(
-        lsp_types::Location::new(url, lsp_types::Range::new(start, end)),
-    )))
+    let target_range = lsp_types::Range::new(
+        lsp_types::Position::new(0, 0),
+        lsp_types::Position::new(0, 0),
+    );
+
+    Ok(Some(lsp_types::GotoDefinitionResponse::Link(vec![
+        lsp_types::LocationLink {
+            origin_selection_range: Some(origin_range),
+            target_uri: url,
+            target_range,
+            target_selection_range: target_range,
+        },
+    ])))
 }
 
 fn cursor_inside(cursor_line: usize, cursor_character: usize, token: &PathToken) -> bool {
