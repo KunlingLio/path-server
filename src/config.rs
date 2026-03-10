@@ -1,12 +1,13 @@
 use std::convert::TryFrom;
+use std::fmt::Display;
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types;
 
 use crate::logger::*;
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Config {
     /// Base paths for relative path completion/highlight/jump.
     /// Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders.
@@ -17,7 +18,7 @@ pub struct Config {
     pub highlight: Highlight,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Completion {
     /// Max results shown in completion; 0 indicates no limit.
     #[serde(alias = "maxResults")]
@@ -36,7 +37,7 @@ pub struct Completion {
     pub trigger_next_completion: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Highlight {
     /// Whether to highlight paths in the editor with underlines.
     pub enable: bool,
@@ -98,6 +99,18 @@ impl TryFrom<serde_json::Value> for Config {
 
     fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
         serde_json::from_value(value)
+    }
+}
+
+/// Display config in json format with indent = 4
+impl Display for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            serde_json::to_string_pretty(self)
+                .unwrap_or_else(|_| "Failed to serialize config".into())
+        )
     }
 }
 

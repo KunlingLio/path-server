@@ -21,8 +21,7 @@ pub struct PathServer {
     workspace_roots: RwLock<HashSet<PathBuf>>,
     /// file path -> document
     documents: RwLock<HashMap<PathBuf, Document>>,
-    /// To override configuration from lsp client
-    config_override: RwLock<Option<config::Config>>,
+    config_cache: RwLock<Option<config::Config>>,
 }
 
 impl PathServer {
@@ -32,23 +31,25 @@ impl PathServer {
             client,
             workspace_roots: RwLock::new(HashSet::new()),
             documents: RwLock::new(HashMap::new()),
-            config_override: RwLock::new(None),
+            config_cache: RwLock::new(None),
         }
     }
 
     async fn get_config(&self) -> config::Config {
-        if let Some(cfg) = self.config_override.read().await.clone() {
+        if let Some(cfg) = self.config_cache.read().await.clone() {
             return cfg;
         }
-        config::get(&self.client).await
+        let cfg = config::get(&self.client).await;
+        *self.config_cache.write().await = Some(cfg.clone());
+        cfg
     }
 
     pub async fn set_test_config(&self, cfg: config::Config) {
         if !cfg!(debug_assertions) {
-            warn("Test configuration can only be set in debug mode, ignore it".into()).await;
-            return;
+            panic!("Test configuration can only be set in debug mode, ignore it");
         }
-        let mut guard = self.config_override.write().await;
+        // a hacky way to make test config effect - set it into cache
+        let mut guard = self.config_cache.write().await;
         *guard = Some(cfg);
     }
 }
@@ -110,7 +111,7 @@ impl tower_lsp::LanguageServer for PathServer {
                 workspace: Some(lsp_types::WorkspaceServerCapabilities {
                     workspace_folders: Some(lsp_types::WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
-                        change_notifications: None,
+                        change_notifications: Some(lsp_types::OneOf::Left(true)),
                     }),
                     ..Default::default()
                 }),
@@ -130,7 +131,13 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_change_configuration(&self, _: lsp_types::DidChangeConfigurationParams) {
-        // TODO: implement it
+        let cfg = config::get(&self.client).await;
+        *self.config_cache.write().await = Some(cfg);
+        info(format!(
+            "[Config] Configuration changed, update to: {}",
+            self.config_cache.read().await.as_ref().unwrap()
+        ))
+        .await;
     }
 
     async fn did_change_workspace_folders(
