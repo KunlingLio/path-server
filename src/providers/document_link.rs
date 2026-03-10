@@ -11,13 +11,15 @@ use crate::fs;
 use crate::parser::{PathCandidate, parse_document};
 
 /// Based on document url for now.
-/// TODO: support configurable base url
 pub async fn provide_document_links(
     doc: &Document,
     doc_path: &Path,
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
+    if !config.highlight.enable {
+        return Ok(vec![]);
+    }
     let tokens: Vec<(PathCandidate, PathBuf)> = future::try_join_all(
         parse_document(doc)
             .into_iter()

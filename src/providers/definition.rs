@@ -13,7 +13,6 @@ use crate::parser::{PathCandidate, parse_document};
 use super::document_link::filter_exist_path;
 
 /// Based on document url for now.
-/// TODO: support configurable base url
 pub async fn provide_definition(
     doc: &Document,
     doc_path: &Path,

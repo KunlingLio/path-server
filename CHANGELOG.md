@@ -13,7 +13,11 @@ All notable changes to the Path Server will be documented in this file.
 - **Core**: Added **Go to Definition** provider support.
     - Enables standard "Go to Definition" functionality for string-based file paths.
     - Users can now use editor shortcuts (e.g., `Cmd/Ctrl + Click` or `F12`) to instantly open the file referenced by a path.
+- **Core**: Added config entry: `path-server.highlight.enable` to control highlighting of file paths in editor.
 - **VS Code**: Add command `Path Server: Restart Server` to restart the Path Server.
+
+### Changed
+- **Core**: Promote config entry from `path-server.completion.basePath` to `path-server.basePath`. Now this configuration is used for both completion and other features.
 
 ## [0.3.0] 2026-03-06
 ### Fixed
