@@ -2,7 +2,7 @@
   "name": "path-server",
   "displayName": "Path Server",
   "description": "Fast, lightweight path autocomplete provided by Path Server",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -49,16 +49,19 @@
             "${workspaceFolder}",
             "${document}"
           ],
+          "order": 0,
           "description": "Base paths for relative path completion, highlight and jump. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
         },
         "path-server.completion.maxResults": {
           "type": "number",
           "default": 0,
+          "order": 1,
           "description": "Max results shown in completion. 0 indicates no limit."
         },
         "path-server.completion.showHiddenFiles": {
           "type": "boolean",
           "default": true,
+          "order": 2,
           "description": "Whether to show hidden files in completion."
         },
         "path-server.completion.exclude": {
@@ -71,17 +74,20 @@
             "**/.git",
             "**/.DS_Store"
           ],
+          "order": 3,
           "description": "List of paths to exclude from completion. Supports glob patterns."
         },
         "path-server.completion.triggerNextCompletion": {
           "type": "boolean",
           "default": true,
+          "order": 4,
           "description": "Whether to automatically trigger next completion after selecting an item."
         },
         "path-server.highlight.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Whether highlight paths in the editor with underscore."
+          "order": 5,
+          "description": "Whether to highlight paths in the editor with underlines."
         }
       }
     }

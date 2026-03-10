@@ -19,7 +19,7 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Completion {
-    /// Max results shown in completion, 0 indicate no limit.
+    /// Max results shown in completion; 0 indicates no limit.
     #[serde(alias = "maxResults")]
     pub max_results: usize,
 
@@ -38,7 +38,7 @@ pub struct Completion {
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Highlight {
-    /// Whether highlight paths in the editor with underscore.
+    /// Whether to highlight paths in the editor with underlines.
     pub enable: bool,
 }
 
