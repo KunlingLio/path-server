@@ -309,8 +309,11 @@ impl tower_lsp::LanguageServer for PathServer {
             warn(format!("Document not found: {}", path.display())).await;
             return Ok(None);
         };
+        let config = self.get_config().await;
+        let workspace_roots = self.workspace_roots.read().await;
 
-        let links = providers::provide_document_links(doc, &path).await?;
+        let links =
+            providers::provide_document_links(doc, &path, &config, &workspace_roots).await?;
         debug(format!(
             "<Document Link> Generated document links: {}",
             links.len()
@@ -348,8 +351,12 @@ impl tower_lsp::LanguageServer for PathServer {
             .await;
             return Ok(None);
         };
+        let config = self.get_config().await;
+        let workspace_roots = self.workspace_roots.read().await;
 
-        let definition = providers::provide_definition(doc, line, character, &path).await?;
+        let definition =
+            providers::provide_definition(doc, &path, line, character, &config, &workspace_roots)
+                .await?;
         if let Some(definition) = &definition {
             let lsp_types::GotoDefinitionResponse::Scalar(definition) = &definition else {
                 unreachable!("Definition is not a scalar");
