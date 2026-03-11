@@ -7,6 +7,15 @@ license = "Apache-2.0"
 repository = "https://github.com/kunlinglio/path-server"
 readme = "README.md"
 
+[features]
+multi-thread = []
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+
 [dependencies]
 blake3 = "1.8.3"
 config = "0.15.19"
@@ -30,9 +39,3 @@ tree-sitter-typescript = "0.23.2"
 
 [dev-dependencies]
 tempfile = "3.26.0"
-
-[profile.release]
-strip = true
-opt-level = "z"
-lto = true
-codegen-units = 1

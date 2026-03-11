@@ -86,6 +86,7 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::InitializeParams,
     ) -> jsonrpc::Result<lsp_types::InitializeResult> {
+        info(format!("Initializing Path Server")).await;
         // set editor env
         let client_env = self.parse_client_env(&params);
         info(format!("Client Env: {}", client_env)).await;
@@ -156,6 +157,11 @@ impl tower_lsp::LanguageServer for PathServer {
     async fn initialized(&self, _: lsp_types::InitializedParams) {
         info("Path Server initialized".to_string()).await;
         info(format!("Path Server version: {}", VERSION)).await;
+        if cfg!(debug_assertions) {
+            info("Running in debug mode".to_string()).await;
+        } else {
+            info("Running in release mode".to_string()).await;
+        }
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
