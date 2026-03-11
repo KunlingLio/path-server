@@ -38,6 +38,8 @@ pub async fn provide_completion(
             &base_dir,
             &partial_name,
             Path::new(""),
+            "absolute",
+            &0,
             completion_config.completion.show_hidden_files,
             completion_config.completion.trigger_next_completion,
         )
@@ -55,11 +57,13 @@ pub async fn provide_completion(
         let base_paths =
             completion_config.base_paths(&workspace_folders, parent.as_ref(), home.as_ref());
 
-        future::try_join_all(base_paths.iter().map(async |base_path| {
+        future::try_join_all(base_paths.iter().map(async |(base_path, schema, order)| {
             generate_completions(
                 &base_dir,
                 &partial_name,
                 base_path,
+                schema,
+                order,
                 completion_config.completion.show_hidden_files,
                 completion_config.completion.trigger_next_completion,
             )
@@ -143,6 +147,8 @@ async fn generate_completions(
     base_dir: &Path,
     partial_name: &str,
     root: &Path,
+    root_schema: &str,         // for visualize
+    root_schema_order: &usize, // for ordering completions
     show_hidden_files: bool,
     trigger_next: bool,
 ) -> PathServerResult<Vec<CompletionItemInner>> {
@@ -180,9 +186,9 @@ async fn generate_completions(
                         label: filename.clone(),
                         kind: Some(lsp_types::CompletionItemKind::FOLDER),
                         insert_text: if trigger_next {
-                            Some(filename + "/")
+                            Some(filename.clone() + "/")
                         } else {
-                            Some(filename)
+                            Some(filename.clone())
                         },
                         command: if trigger_next {
                             Some(lsp_types::Command {
@@ -193,6 +199,12 @@ async fn generate_completions(
                         } else {
                             None
                         },
+                        sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
+                        filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
+                        label_details: Some(lsp_types::CompletionItemLabelDetails {
+                            description: Some(format!("from {}", root_schema)),
+                            ..Default::default()
+                        }),
                         ..Default::default()
                     },
                     full_path: file.path(),
@@ -203,7 +215,13 @@ async fn generate_completions(
                     completion: lsp_types::CompletionItem {
                         label: filename.clone(),
                         kind: Some(lsp_types::CompletionItemKind::FILE),
-                        insert_text: Some(filename),
+                        insert_text: Some(filename.clone()),
+                        sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
+                        filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
+                        label_details: Some(lsp_types::CompletionItemLabelDetails {
+                            description: Some(format!("from {}", root_schema)),
+                            ..Default::default()
+                        }),
                         ..Default::default()
                     },
                     full_path: file.path(),
@@ -353,10 +371,17 @@ mod tests {
         std::fs::File::create(base.join("banana.txt")).unwrap();
 
         // complete_absolute with partial "app"
-        let abs_results =
-            generate_completions(&base.to_path_buf(), "app", Path::new(""), true, true)
-                .await
-                .unwrap();
+        let abs_results = generate_completions(
+            &base.to_path_buf(),
+            "app",
+            Path::new(""),
+            "",
+            &0,
+            true,
+            true,
+        )
+        .await
+        .unwrap();
         let labels: Vec<String> = abs_results
             .into_iter()
             .map(|c| c.completion.label)
@@ -400,6 +425,8 @@ mod tests {
             &base.to_path_buf().join("a_dir"),
             "",
             Path::new(""),
+            "",
+            &0,
             false,
             true,
         )
@@ -417,6 +444,8 @@ mod tests {
             &base.to_path_buf().join("a_dir"),
             "",
             Path::new(""),
+            "",
+            &0,
             true,
             true,
         )
@@ -440,9 +469,10 @@ mod tests {
         std::fs::create_dir(root.join("subdir").join("parcel")).unwrap();
 
         // complete_relative for base_dir "subdir/" and partial "par"
-        let rel_results = generate_completions(&PathBuf::from("subdir/"), "par", root, true, true)
-            .await
-            .unwrap();
+        let rel_results =
+            generate_completions(&PathBuf::from("subdir/"), "par", root, "", &0, true, true)
+                .await
+                .unwrap();
         let mut found_file = false;
         let mut found_dir = false;
         for item in rel_results {
@@ -489,9 +519,10 @@ mod tests {
         assert!(hf::is_hidden(base.join("a_dir").join(&hidden_filepath)).unwrap());
 
         // complete without showing hidden files
-        let abs_results = generate_completions(&PathBuf::from("./a_dir"), "", base, false, true)
-            .await
-            .unwrap();
+        let abs_results =
+            generate_completions(&PathBuf::from("./a_dir"), "", base, "", &0, false, true)
+                .await
+                .unwrap();
         let labels: Vec<String> = abs_results
             .into_iter()
             .map(|c| c.completion.label)
@@ -500,9 +531,10 @@ mod tests {
         assert!(!labels.contains(&hidden_filepath));
 
         // complete with showing hidden files
-        let abs_results = generate_completions(&PathBuf::from("./a_dir"), "", base, true, true)
-            .await
-            .unwrap();
+        let abs_results =
+            generate_completions(&PathBuf::from("./a_dir"), "", base, "", &0, true, true)
+                .await
+                .unwrap();
         let labels: Vec<String> = abs_results
             .into_iter()
             .map(|c| c.completion.label)

@@ -6,6 +6,12 @@ All notable changes to the Path Server will be documented in this file.
 ### Added
 - **Core**: Support to provide hover information on paths.
 
+### Improved
+- **Core**: Enhance completion UX：
+    - Added descriptions to completion items to show which `base_paths` they originated from.
+    - Improved suggestion ordering: entries now respect the order defined in the `base_path` configuration.
+    - Support filtering completion items based on `base_path` categories.
+
 ## [0.5.0] - 2026-03-11
 ### Added
 - **VS Code**: Included `CHANGELOG.md` inside package.

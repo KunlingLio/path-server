@@ -106,7 +106,7 @@ async fn filter_exist_path(
                 ));
             }
         } else if path.is_relative() {
-            for base_path in config.base_paths(workspace_roots, parent, home) {
+            for (base_path, _, _) in config.base_paths(workspace_roots, parent, home) {
                 let full_path = base_path.join(&path);
                 if fs::exists(&full_path).await {
                     return PathServerResult::Ok(Some(

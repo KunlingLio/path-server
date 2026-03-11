@@ -59,7 +59,7 @@ You can customize Path Server's behavior via your editor's settings.
 
 | Property | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `path-server.basePath` | Array | `["${workspaceFolder}", "${document}"]` | Base paths for relative path completion, highlight and jump. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. |
+| `path-server.basePath` | Array | `[ "${document}", "${workspaceFolder}"]` | Base paths for relative path completion, highlight and jump. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. The order determines the priority in suggestions.|
 | `path-server.completion.maxResults` | Number | `0` | Max results shown in completion. `0` indicates no limit. |
 | `path-server.completion.showHiddenFiles` | Boolean | `true` | Whether to show hidden files in completion. |
 | `path-server.completion.exclude` | Array | `["**/node_modules", "**/.git", "**/.DS_Store"]` | List of paths to exclude from completion. Supports glob patterns. |
