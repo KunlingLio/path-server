@@ -1,12 +1,16 @@
 use std::convert::TryFrom;
+use std::fmt::Display;
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use config::{Config as ConfigLoader, File, FileFormat};
+use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types;
 
+use crate::error::*;
 use crate::logger::*;
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct Config {
     /// Base paths for relative path completion/highlight/jump.
     /// Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders.
@@ -17,7 +21,8 @@ pub struct Config {
     pub highlight: Highlight,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct Completion {
     /// Max results shown in completion; 0 indicates no limit.
     #[serde(alias = "maxResults")]
@@ -36,41 +41,69 @@ pub struct Completion {
     pub trigger_next_completion: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct Highlight {
     /// Whether to highlight paths in the editor with underlines.
     pub enable: bool,
+
+    /// Whether to highlight directory paths. (Jump behavior may vary by editor/OS).
+    #[serde(alias = "highlightDirectory")]
+    pub highlight_directory: bool,
 }
 
 impl Config {
     pub fn base_paths(
         &self,
         workspace_folders: &[String],
-        document_parent: &Option<String>,
-        user_home: &Option<String>,
+        document_parent: Option<&String>,
+        user_home: Option<&String>,
     ) -> Vec<PathBuf> {
-        let mut expanded_paths = vec![];
-        for path in &self.base_path {
-            if path.contains("${workspaceFolder}") {
-                for workspace_folder in workspace_folders {
-                    let expanded = path.replace("${workspaceFolder}", workspace_folder);
-                    expanded_paths.push(PathBuf::from(expanded));
+        self.base_path
+            .iter()
+            .filter_map(|path| {
+                if path.contains("${workspaceFolder}") {
+                    Some(
+                        workspace_folders
+                            .iter()
+                            .map(|workspace_folder| {
+                                let expanded = path.replace("${workspaceFolder}", workspace_folder);
+                                PathBuf::from(expanded)
+                            })
+                            .collect(),
+                    )
+                } else if path.contains("${document}") {
+                    match document_parent {
+                        Some(parent) => {
+                            let expanded = path.replace("${document}", parent);
+                            Some(vec![PathBuf::from(expanded)])
+                        }
+                        None => None,
+                    }
+                } else if path.contains("${userHome}") {
+                    match user_home {
+                        Some(home) => {
+                            let expanded = path.replace("${userHome}", home);
+                            Some(vec![PathBuf::from(expanded)])
+                        }
+                        None => None,
+                    }
+                } else {
+                    Some(vec![PathBuf::from(path)])
                 }
-            } else if path.contains("${document}") {
-                if document_parent.is_some() {
-                    let expanded = path.replace("${document}", document_parent.as_deref().unwrap());
-                    expanded_paths.push(PathBuf::from(expanded));
-                }
-            } else if path.contains("${userHome}") {
-                if user_home.is_some() {
-                    let expanded = path.replace("${userHome}", user_home.as_deref().unwrap());
-                    expanded_paths.push(PathBuf::from(expanded));
-                }
-            } else {
-                expanded_paths.push(PathBuf::from(path));
-            }
-        }
-        expanded_paths
+            })
+            .flatten()
+            .collect()
+    }
+
+    pub fn signature(&self) -> PathServerResult<String> {
+        let bytes = serde_json::to_vec(self).map_err(|e| {
+            PathServerError::Unknown(format!(
+                "Failed to calculate config signature, failed to serialize config: {}",
+                e
+            ))
+        })?;
+        Ok(blake3::hash(&bytes).to_hex().to_string())
     }
 }
 
@@ -88,7 +121,10 @@ impl Default for Config {
                 ],
                 trigger_next_completion: true,
             },
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         }
     }
 }
@@ -101,31 +137,103 @@ impl TryFrom<serde_json::Value> for Config {
     }
 }
 
+impl Display for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            serde_json::to_string_pretty(self)
+                .unwrap_or_else(|_| "Failed to serialize config".into())
+        )
+    }
+}
+
 pub async fn get(client: &tower_lsp::Client) -> Config {
-    let configs = client
+    let user_configs = client
         .configuration(vec![lsp_types::ConfigurationItem {
             scope_uri: None,
             section: Some("path-server".to_string()),
         }])
         .await;
-    let Ok(configs) = configs else {
-        warn(format!(
-            "Failed to get configuration:{}, use default",
-            configs.unwrap_err()
+    let Ok(user_configs) = user_configs else {
+        error(format!(
+            "Failed to get user configs: {}, use default config",
+            user_configs.unwrap_err()
         ))
         .await;
-        return Default::default();
+        return Config::default();
     };
-    assert!(configs.len() == 1);
-    let Ok(config) = Config::try_from(configs[0].clone()) else {
-        warn(format!(
-            "Failed to parse configuration:{}, use default",
-            configs[0].clone()
+    if user_configs.is_empty() || user_configs[0].is_null() {
+        return Config::default();
+    }
+
+    let merge_res = merge_configs(Config::default(), user_configs);
+    let Ok(config) = merge_res else {
+        error(format!(
+            "Failed to merge configs: {}, use default config",
+            merge_res.unwrap_err()
         ))
         .await;
-        return Default::default();
+        return Config::default();
     };
     config
+}
+
+fn merge_configs(default: Config, user: Vec<serde_json::Value>) -> PathServerResult<Config> {
+    let mut builder = ConfigLoader::builder();
+    let default_json = serde_json::to_string(&default).unwrap();
+    builder = builder.add_source(File::from_str(&default_json, FileFormat::Json));
+
+    let normalized_user = normalize_keys(user[0].clone());
+    let user_json = normalized_user.to_string();
+    builder = builder.add_source(File::from_str(&user_json, FileFormat::Json));
+
+    match builder.build() {
+        Ok(c) => match c.try_deserialize::<Config>() {
+            Ok(config) => Ok(config),
+            Err(e) => Err(PathServerError::UserConfigError(format!(
+                "Failed to deserialize merged config: {}",
+                e
+            ))),
+        },
+        Err(e) => Err(PathServerError::UserConfigError(format!(
+            "Failed to build config: {}",
+            e
+        ))),
+    }
+}
+
+/// Convert input json's keys into snake case
+fn normalize_keys(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut new_map = serde_json::Map::new();
+            for (k, v) in map {
+                let snake_key = to_snake_case(&k);
+                new_map.insert(snake_key, normalize_keys(v));
+            }
+            serde_json::Value::Object(new_map)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.into_iter().map(normalize_keys).collect())
+        }
+        other => other,
+    }
+}
+
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.char_indices() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_ascii_lowercase());
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -145,7 +253,8 @@ mod tests {
                 "trigger_next_completion": true
             },
             "highlight": {
-                "enable": true
+                "enable": true,
+                "highlight_directory": true
             }
         }"#;
         let v: serde_json::Value = serde_json::from_str(default_json).unwrap();
@@ -167,14 +276,17 @@ mod tests {
                 exclude: vec![],
                 trigger_next_completion: true,
             },
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         };
 
         let workspace_folders = vec!["/ws1".to_string(), "/ws2".to_string()];
-        let document_parent = Some("/ws1/project".to_string());
+        let document_parent = Some(&"/ws1/project".to_string());
         let user_home = None;
 
-        let result = config.base_paths(&workspace_folders, &document_parent, &user_home);
+        let result = config.base_paths(&workspace_folders, document_parent, user_home);
 
         let expected: Vec<PathBuf> = vec![
             "/ws1/src".into(),
@@ -196,17 +308,75 @@ mod tests {
                 exclude: vec![],
                 trigger_next_completion: true,
             },
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         };
 
         let workspace_folders = vec![];
         let document_parent = None;
-        let user_home = Some("/home/user".to_string());
+        let user_home = Some(&"/home/user".to_string());
 
-        let result = config.base_paths(&workspace_folders, &document_parent, &user_home);
+        let result = config.base_paths(&workspace_folders, document_parent, user_home);
 
         let expected: Vec<PathBuf> = vec!["/home/user/foo".into()];
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_merge_highlight_partial() {
+        let default = Config::default();
+        let user_json = serde_json::json!({"highlight": {"enable": false}});
+        let res = merge_configs(default.clone(), vec![user_json]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg.highlight.enable, false);
+        assert_eq!(
+            cfg.highlight.highlight_directory,
+            default.highlight.highlight_directory
+        );
+        assert_eq!(cfg.completion, default.completion);
+        assert_eq!(cfg.base_path, default.base_path);
+    }
+
+    #[test]
+    fn test_merge_camel_case() {
+        let default = Config::default();
+        let user_json = serde_json::json!({"completion": {"maxResults": 10}});
+        let res = merge_configs(default.clone(), vec![user_json]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg.completion.max_results, 10);
+    }
+
+    #[test]
+    fn test_merge_partial_completion() {
+        let default = Config::default();
+        let user_json = serde_json::json!({
+            "completion": {"max_results": 10, "exclude": ["/tmp"]}
+        });
+        let res = merge_configs(default.clone(), vec![user_json]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg.completion.max_results, 10);
+        assert_eq!(cfg.completion.exclude, vec!["/tmp".to_string()]);
+        assert_eq!(cfg.highlight, default.highlight);
+        assert_eq!(
+            cfg.completion.show_hidden_files,
+            default.completion.show_hidden_files
+        );
+        assert_eq!(cfg.base_path, default.base_path);
+    }
+
+    #[test]
+    fn test_merge_self() {
+        let default = Config::default();
+        let users = serde_json::to_value(&default).unwrap();
+        let res = merge_configs(default.clone(), vec![users]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg, default);
     }
 }

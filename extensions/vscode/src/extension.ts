@@ -43,6 +43,9 @@ export async function activate(context: vscode.ExtensionContext) {
         ],
         outputChannel: serverOutputChannel,
         traceOutputChannel: traceChannel,
+        synchronize: {
+            configurationSection: 'path-server'
+        }
     };
 
     client = new languageClient.LanguageClient(

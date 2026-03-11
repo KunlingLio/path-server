@@ -37,11 +37,16 @@ You can use it by installing specified extension for your editor.
   "lsp": {
     "path-server": {
       "settings": {
+        "basePath": ["${workspaceFolder}", "${document}"],
         "completion": {
-          "maxResults": 5,
-          "showHiddenFiles": false,
-          "exclude": ["**/node_modules/**", "**/.git/**"],
-          "basePath": ["${workspaceFolder}", "${root}"]
+          "maxResults": 0,
+          "showHiddenFiles": true,
+          "exclude": ["**/node_modules", "**/.git", "**/.DS_Store"],
+          "triggerNextCompletion": true
+        },
+        "highlight": {
+          "enable": true,
+          "highlightDirectory": true
         }
       }
     }
@@ -60,6 +65,7 @@ You can customize Path Server's behavior via your editor's settings.
 | `path-server.completion.exclude` | Array | `["**/node_modules", "**/.git", "**/.DS_Store"]` | List of paths to exclude from completion. Supports glob patterns. |
 | `path-server.completion.triggerNextCompletion` | Boolean | `true` | Whether to automatically trigger the next completion after selecting a path. |
 | `path-server.highlight.enable` | Boolean | `true` | Whether to highlight paths in the editor with underlines. |
+| `path-server.highlight.highlightDirectory` | Boolean | `true` | Whether to highlight directory paths. (Jump behavior may vary by editor/OS).|
 
 ## Resources
 - [GitHub Repository](https://github.com/kunlinglio/path-server)

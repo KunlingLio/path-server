@@ -52,7 +52,8 @@ pub async fn complete(
             .parent()
             .map(|p| p.to_string_lossy().into_owned());
         let home = std::env::var("HOME").ok();
-        let base_paths = completion_config.base_paths(&workspace_folders, &parent, &home);
+        let base_paths =
+            completion_config.base_paths(&workspace_folders, parent.as_ref(), home.as_ref());
 
         future::try_join_all(base_paths.iter().map(async |base_path| {
             generate_completions(
@@ -247,7 +248,10 @@ mod tests {
                 exclude: vec!["*.log".into()],
                 trigger_next_completion: true,
             },
-            highlight: crate::config::Highlight { enable: true },
+            highlight: crate::config::Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         };
 
         let items = complete("./data/a", &roots, &current_file, &config)
