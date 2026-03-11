@@ -31,18 +31,18 @@ async fn test_goto_definition_integration() {
     assert!(res.is_some(), "Expected a definition result");
 
     match res.unwrap() {
-        GotoDefinitionResponse::Scalar(loc) => {
+        GotoDefinitionResponse::Link(loc) => {
             let expected = tokio::fs::canonicalize(harness.root_path().join("docs/config.json"))
                 .await
                 .unwrap();
             assert_eq!(
-                tokio::fs::canonicalize(&loc.uri.to_file_path().unwrap())
+                tokio::fs::canonicalize(&loc[0].target_uri.to_file_path().unwrap())
                     .await
                     .unwrap(),
                 expected
             );
         }
-        _ => panic!("Expected scalar location"),
+        _ => panic!("Expected link location"),
     }
 }
 
@@ -63,7 +63,10 @@ async fn test_goto_definition_with_base_path() {
             exclude: vec![],
             trigger_next_completion: true,
         },
-        highlight: path_server::Highlight { enable: true },
+        highlight: path_server::Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg).await;
 
@@ -92,17 +95,17 @@ async fn test_goto_definition_with_base_path() {
     );
 
     match res.unwrap() {
-        GotoDefinitionResponse::Scalar(loc) => {
+        GotoDefinitionResponse::Link(loc) => {
             let expected = tokio::fs::canonicalize(harness.root_path().join("extra/libs/math.js"))
                 .await
                 .unwrap();
             assert_eq!(
-                tokio::fs::canonicalize(&loc.uri.to_file_path().unwrap())
+                tokio::fs::canonicalize(&loc[0].target_uri.to_file_path().unwrap())
                     .await
                     .unwrap(),
                 expected
             );
         }
-        _ => panic!("Expected scalar location"),
+        _ => panic!("Expected link location"),
     }
 }

@@ -248,7 +248,10 @@ mod tests {
                 exclude: vec!["*.log".into()],
                 trigger_next_completion: true,
             },
-            highlight: crate::config::Highlight { enable: true },
+            highlight: crate::config::Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         };
 
         let items = complete("./data/a", &roots, &current_file, &config)

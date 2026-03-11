@@ -53,7 +53,10 @@ async fn test_document_link_with_base_path() {
             exclude: vec![],
             trigger_next_completion: true,
         },
-        highlight: path_server::Highlight { enable: true },
+        highlight: path_server::Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg).await;
 

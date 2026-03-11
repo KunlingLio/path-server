@@ -20,10 +20,11 @@ pub async fn provide_definition(
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Option<lsp_types::GotoDefinitionResponse>> {
     let tokens = get_or_compute_tokens(doc, config, workspace_roots, doc_path).await?;
-
-    let current_token: Vec<&PathToken> = tokens
-        .as_ref()
+    let filtered = tokens
         .iter()
+        .filter(|t| config.highlight.highlight_directory || !t.is_dir);
+
+    let current_token: Vec<&PathToken> = filtered
         .filter(|token| cursor_inside(line, character, token))
         .collect();
 
@@ -122,15 +123,15 @@ mod tests {
         .unwrap();
         assert!(res.is_some());
         match res.unwrap() {
-            lsp_types::GotoDefinitionResponse::Scalar(loc) => {
+            lsp_types::GotoDefinitionResponse::Link(loc) => {
                 assert_eq!(
-                    tokio::fs::canonicalize(&loc.uri.to_file_path().unwrap())
+                    tokio::fs::canonicalize(&loc[0].target_uri.to_file_path().unwrap())
                         .await
                         .unwrap(),
                     tokio::fs::canonicalize(&target).await.unwrap()
                 );
             }
-            _ => panic!("Expected scalar location"),
+            _ => panic!("Expected link location"),
         }
     }
 
@@ -168,17 +169,17 @@ mod tests {
         .unwrap();
         assert!(res.is_some());
         match res.unwrap() {
-            lsp_types::GotoDefinitionResponse::Scalar(loc) => {
+            lsp_types::GotoDefinitionResponse::Link(loc) => {
                 // normalize expected path to match canonicalized result
                 let expected = tokio::fs::canonicalize(&target).await.unwrap();
                 assert_eq!(
-                    tokio::fs::canonicalize(&loc.uri.to_file_path().unwrap())
+                    tokio::fs::canonicalize(&loc[0].target_uri.to_file_path().unwrap())
                         .await
                         .unwrap(),
                     expected
                 );
             }
-            _ => panic!("Expected scalar location"),
+            _ => panic!("Expected link location"),
         }
     }
 }

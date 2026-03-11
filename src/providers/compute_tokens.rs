@@ -11,8 +11,8 @@ use crate::error::*;
 use crate::fs;
 use crate::parser::{PathCandidate, parse_document};
 
-pub async fn get_or_compute_tokens<'a>(
-    document: &'a Document,
+pub async fn get_or_compute_tokens(
+    document: &Document,
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
     doc_path: &Path,
@@ -72,7 +72,7 @@ async fn filter_exist_path(
     for candidate in candidates {
         let path = PathBuf::from(&candidate.content);
         if path.is_absolute() {
-            if fs::exists(&path).await && !fs::is_dir(&path).await {
+            if fs::exists(&path).await {
                 return PathServerResult::Ok(Some(
                     candidate_to_token(&candidate, &path, document).await?,
                 ));
@@ -80,7 +80,7 @@ async fn filter_exist_path(
         } else if path.is_relative() {
             for base_path in config.base_paths(workspace_roots, parent, home) {
                 let full_path = base_path.join(&path);
-                if fs::exists(&full_path).await && !fs::is_dir(&full_path).await {
+                if fs::exists(&full_path).await {
                     return PathServerResult::Ok(Some(
                         candidate_to_token(&candidate, &full_path, document).await?,
                     ));
@@ -104,5 +104,6 @@ async fn candidate_to_token(
         start,
         end,
         target: tokio::fs::canonicalize(&path).await?,
+        is_dir: fs::is_dir(path).await,
     })
 }

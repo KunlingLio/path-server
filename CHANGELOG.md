@@ -5,14 +5,16 @@ All notable changes to the Path Server will be documented in this file.
 ## [Unreleased]
 ### Added
 - **VS Code**: Included `CHANGELOG.md` inside package.
+- **Core**: Added config entry: `path-server.highlight.highlightDirectory` to control whether to highlight directory paths. (Jump behavior may vary by editor/OS).
 
 ### Fixed
-- **Core**: Fix highlight directory issue in editor.
-- **Core**: Fix "Go to Definition" functionality.
+- **Core**: Fixed highlight directory issue in editor.
+- **Core**: Fixed "Go to Definition" functionality.
 
 ### Improved
-- **Core**: Improve log messages for better readability.
-- **Core**: Add configuration cache to avoid frequent polling.
+- **Core**: Enhance build profile to reduce executable size.
+- **Core**: Improved log messages for better readability.
+- **Core**: Added configuration cache to avoid frequent polling.
 - **Core**: Support partial config merging, now user can override one single setting rather than provide the entire configuration.
 - **Core**: Improve performance distinctively by adding tokens cache.
 

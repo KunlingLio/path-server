@@ -24,7 +24,10 @@ async fn test_config_max_results_limits_items() {
     let cfg = Config {
         base_path: vec!["${workspaceFolder}".into()],
         completion: completion_cfg,
-        highlight: Highlight { enable: true },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg).await;
 
@@ -55,7 +58,10 @@ async fn test_config_show_hidden_files_false() {
     let cfg = Config {
         base_path: vec!["${workspaceFolder}".into()],
         completion: completion_cfg,
-        highlight: Highlight { enable: true },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg).await;
 
@@ -88,7 +94,10 @@ async fn test_config_exclude() {
     let cfg = Config {
         base_path: vec!["${workspaceFolder}".into()],
         completion: completion_cfg,
-        highlight: Highlight { enable: true },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg).await;
 
@@ -121,7 +130,10 @@ async fn test_config_base_path() {
     let cfg = Config {
         base_path: vec!["${workspaceFolder}/alt".into()],
         completion: completion_cfg,
-        highlight: Highlight { enable: true },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg).await;
 
@@ -155,7 +167,10 @@ async fn test_config_trigger_next_completion() {
         .set_config(Config {
             base_path: vec!["${workspaceFolder}".into()],
             completion: cfg_with,
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         })
         .await;
 
@@ -187,7 +202,10 @@ async fn test_config_trigger_next_completion() {
         .set_config(Config {
             base_path: vec!["${workspaceFolder}".into()],
             completion: cfg_without,
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         })
         .await;
 
@@ -219,7 +237,10 @@ async fn test_config_highlight_enable() {
             exclude: vec![],
             trigger_next_completion: true,
         },
-        highlight: Highlight { enable: true },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg_with).await;
 
@@ -242,7 +263,10 @@ async fn test_config_highlight_enable() {
             exclude: vec![],
             trigger_next_completion: true,
         },
-        highlight: Highlight { enable: false },
+        highlight: Highlight {
+            enable: false,
+            highlight_directory: true,
+        },
     };
     harness.set_config(cfg_without).await;
 
@@ -251,5 +275,61 @@ async fn test_config_highlight_enable() {
     assert!(
         links_disabled.is_empty(),
         "Document links should be empty when highlight is disabled"
+    );
+}
+
+#[tokio::test]
+async fn test_config_highlight_directory() {
+    let harness = TestHarness::new().await;
+
+    // ensure directory exists
+    harness.create_file("dir/file.txt");
+    harness.create_file("src/main.rs");
+
+    // highlight_directory == true
+    let cfg_with = Config {
+        base_path: vec!["${workspaceFolder}".into()],
+        completion: path_server::Completion {
+            max_results: 0,
+            show_hidden_files: true,
+            exclude: vec![],
+            trigger_next_completion: true,
+        },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
+    };
+    harness.set_config(cfg_with).await;
+
+    let content = "let p = \"./dir/\"";
+    let uri = harness.open_doc("src/main.rs", content).await;
+
+    let links = harness.document_links(&uri).await;
+    assert!(
+        !links.is_empty(),
+        "Document links should be present for directories when highlight_directory is true"
+    );
+
+    // highlight_directory == false
+    let cfg_without = Config {
+        base_path: vec!["${workspaceFolder}".into()],
+        completion: path_server::Completion {
+            max_results: 0,
+            show_hidden_files: true,
+            exclude: vec![],
+            trigger_next_completion: true,
+        },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: false,
+        },
+    };
+    harness.set_config(cfg_without).await;
+
+    let links_disabled = harness.document_links(&uri).await;
+    assert!(
+        links_disabled.is_empty(),
+        "Document links should be empty for directories when highlight_directory is false"
     );
 }

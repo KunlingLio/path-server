@@ -46,6 +46,10 @@ pub struct Completion {
 pub struct Highlight {
     /// Whether to highlight paths in the editor with underlines.
     pub enable: bool,
+
+    /// Whether to highlight directory paths. (Jump behavior may vary by editor/OS).
+    #[serde(alias = "highlightDirectory")]
+    pub highlight_directory: bool,
 }
 
 impl Config {
@@ -55,28 +59,41 @@ impl Config {
         document_parent: Option<&String>,
         user_home: Option<&String>,
     ) -> Vec<PathBuf> {
-        let mut expanded_paths = vec![];
-        for path in &self.base_path {
-            if path.contains("${workspaceFolder}") {
-                for workspace_folder in workspace_folders {
-                    let expanded = path.replace("${workspaceFolder}", workspace_folder);
-                    expanded_paths.push(PathBuf::from(expanded));
+        self.base_path
+            .iter()
+            .filter_map(|path| {
+                if path.contains("${workspaceFolder}") {
+                    Some(
+                        workspace_folders
+                            .iter()
+                            .map(|workspace_folder| {
+                                let expanded = path.replace("${workspaceFolder}", workspace_folder);
+                                PathBuf::from(expanded)
+                            })
+                            .collect(),
+                    )
+                } else if path.contains("${document}") {
+                    match document_parent {
+                        Some(parent) => {
+                            let expanded = path.replace("${document}", parent);
+                            Some(vec![PathBuf::from(expanded)])
+                        }
+                        None => None,
+                    }
+                } else if path.contains("${userHome}") {
+                    match user_home {
+                        Some(home) => {
+                            let expanded = path.replace("${userHome}", home);
+                            Some(vec![PathBuf::from(expanded)])
+                        }
+                        None => None,
+                    }
+                } else {
+                    Some(vec![PathBuf::from(path)])
                 }
-            } else if path.contains("${document}") {
-                if document_parent.is_some() {
-                    let expanded = path.replace("${document}", document_parent.unwrap());
-                    expanded_paths.push(PathBuf::from(expanded));
-                }
-            } else if path.contains("${userHome}") {
-                if user_home.is_some() {
-                    let expanded = path.replace("${userHome}", user_home.unwrap());
-                    expanded_paths.push(PathBuf::from(expanded));
-                }
-            } else {
-                expanded_paths.push(PathBuf::from(path));
-            }
-        }
-        expanded_paths
+            })
+            .flatten()
+            .collect()
     }
 }
 
@@ -94,7 +111,10 @@ impl Default for Config {
                 ],
                 trigger_next_completion: true,
             },
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         }
     }
 }
@@ -151,10 +171,11 @@ pub async fn get(client: &tower_lsp::Client) -> Config {
 
 fn merge_configs(default: Config, user: Vec<serde_json::Value>) -> PathServerResult<Config> {
     let mut builder = ConfigLoader::builder();
-    let default_json = clean_json(&serde_json::to_string(&default).unwrap())?;
+    let default_json = serde_json::to_string(&default).unwrap();
     builder = builder.add_source(File::from_str(&default_json, FileFormat::Json));
 
-    let user_json = clean_json(&user[0].to_string())?;
+    let normalized_user = normalize_keys(user[0].clone());
+    let user_json = normalized_user.to_string();
     builder = builder.add_source(File::from_str(&user_json, FileFormat::Json));
 
     match builder.build() {
@@ -172,15 +193,37 @@ fn merge_configs(default: Config, user: Vec<serde_json::Value>) -> PathServerRes
     }
 }
 
-/// Clean json format by convert str -> Config
-/// and Config -> str
-fn clean_json(json: &str) -> PathServerResult<String> {
-    let config: Config = serde_json::from_str(json).map_err(|e| {
-        PathServerError::UserConfigError(format!("Failed to parse user config: {}", e))
-    })?;
-    serde_json::to_string_pretty(&config).map_err(|e| {
-        PathServerError::UserConfigError(format!("Failed to clean user config: {}", e))
-    })
+/// Convert input json's keys into snake case
+fn normalize_keys(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut new_map = serde_json::Map::new();
+            for (k, v) in map {
+                let snake_key = to_snake_case(&k);
+                new_map.insert(snake_key, normalize_keys(v));
+            }
+            serde_json::Value::Object(new_map)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.into_iter().map(normalize_keys).collect())
+        }
+        other => other,
+    }
+}
+
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.char_indices() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_ascii_lowercase());
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -200,7 +243,8 @@ mod tests {
                 "trigger_next_completion": true
             },
             "highlight": {
-                "enable": true
+                "enable": true,
+                "highlight_directory": true
             }
         }"#;
         let v: serde_json::Value = serde_json::from_str(default_json).unwrap();
@@ -222,7 +266,10 @@ mod tests {
                 exclude: vec![],
                 trigger_next_completion: true,
             },
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         };
 
         let workspace_folders = vec!["/ws1".to_string(), "/ws2".to_string()];
@@ -251,7 +298,10 @@ mod tests {
                 exclude: vec![],
                 trigger_next_completion: true,
             },
-            highlight: Highlight { enable: true },
+            highlight: Highlight {
+                enable: true,
+                highlight_directory: true,
+            },
         };
 
         let workspace_folders = vec![];
@@ -273,8 +323,22 @@ mod tests {
         assert!(res.is_ok());
         let cfg = res.unwrap();
         assert_eq!(cfg.highlight.enable, false);
+        assert_eq!(
+            cfg.highlight.highlight_directory,
+            default.highlight.highlight_directory
+        );
         assert_eq!(cfg.completion, default.completion);
         assert_eq!(cfg.base_path, default.base_path);
+    }
+
+    #[test]
+    fn test_merge_camel_case() {
+        let default = Config::default();
+        let user_json = serde_json::json!({"completion": {"maxResults": 10}});
+        let res = merge_configs(default.clone(), vec![user_json]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg.completion.max_results, 10);
     }
 
     #[test]

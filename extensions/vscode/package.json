@@ -88,6 +88,12 @@
           "default": true,
           "order": 5,
           "description": "Whether to highlight paths in the editor with underlines."
+        },
+        "path-server.highlight.highlightDirectory": {
+          "type": "boolean",
+          "default": true,
+          "order": 6,
+          "description": "Whether to highlight directory paths. (Jump behavior may vary by editor/OS)."
         }
       }
     }

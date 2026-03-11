@@ -17,6 +17,7 @@ pub struct PathToken {
     pub start: (usize, usize), // (line, character) in utf16
     pub end: (usize, usize),   // (line, character) in utf16
     pub target: PathBuf,
+    pub is_dir: bool,
 }
 
 #[derive(Debug)]
