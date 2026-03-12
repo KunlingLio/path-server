@@ -6,7 +6,7 @@ use tower_lsp::lsp_types;
 use crate::Config;
 use crate::document::Document;
 use crate::error::*;
-use crate::logger::*;
+use crate::fs;
 use crate::resolver::resolve_at_pos;
 
 pub async fn provide_hover(
@@ -31,14 +31,7 @@ pub async fn provide_hover(
         lsp_types::Position::new(current_token.end.0 as u32, current_token.end.1 as u32);
     let origin_range = lsp_types::Range::new(origin_start, origin_end);
 
-    let Ok(url) = lsp_types::Url::from_file_path(&current_token.target) else {
-        warn(format!(
-            "Failed to convert path to URL: {}",
-            current_token.target.display()
-        ))
-        .await;
-        return Ok(None);
-    };
+    let url = fs::path_to_url(&current_token.target)?;
 
     Ok(Some(lsp_types::Hover {
         contents: lsp_types::HoverContents::Scalar(lsp_types::MarkedString::String(

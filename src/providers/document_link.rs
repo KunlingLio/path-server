@@ -6,6 +6,7 @@ use crate::client::get_client;
 use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
+use crate::fs;
 use crate::resolver::resolve_all;
 
 pub async fn provide_document_links(
@@ -31,14 +32,7 @@ pub async fn provide_document_links(
 
             let link = lsp_types::DocumentLink {
                 range,
-                target: Some(
-                    lsp_types::Url::from_file_path(token.target.clone()).map_err(|_| {
-                        PathServerError::InvalidPath(format!(
-                            "Failed to convert path {} into url",
-                            token.target.display()
-                        ))
-                    })?,
-                ),
+                target: Some(fs::path_to_url(&token.target)?),
                 tooltip: Some(format!("Open file: {}", token.target.display())),
                 data: None,
             };

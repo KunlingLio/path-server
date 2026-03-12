@@ -10,28 +10,7 @@ use crate::error::*;
 use crate::fs;
 use crate::parser::{PathCandidate, parse_document};
 
-#[derive(Debug, Clone)]
-pub struct ResolvedPath {
-    pub start: (usize, usize), // (line, character) in utf16
-    pub end: (usize, usize),   // (line, character) in utf16
-    pub target: PathBuf,
-    pub is_dir: bool,
-}
-
-#[derive(Debug)]
-pub struct ResolvedPathCache {
-    tokens: Option<Arc<Vec<ResolvedPath>>>,
-    config_signature: String,
-}
-
-impl ResolvedPathCache {
-    pub fn new() -> Self {
-        Self {
-            tokens: None,
-            config_signature: String::new(),
-        }
-    }
-}
+use super::{ResolvedPath, ResolvedPathCache};
 
 pub async fn resolve_all(
     document: &Document,
@@ -102,7 +81,7 @@ async fn filter_exist_path(
         if path.is_absolute() {
             if fs::exists(&path).await {
                 return PathServerResult::Ok(Some(
-                    candidate_to_token(&candidate, &path, document).await?,
+                    candidate_to_resolved(&candidate, &path, document).await?,
                 ));
             }
         } else if path.is_relative() {
@@ -110,7 +89,7 @@ async fn filter_exist_path(
                 let full_path = base_path.join(&path);
                 if fs::exists(&full_path).await {
                     return PathServerResult::Ok(Some(
-                        candidate_to_token(&candidate, &full_path, document).await?,
+                        candidate_to_resolved(&candidate, &full_path, document).await?,
                     ));
                 }
             }
@@ -121,7 +100,7 @@ async fn filter_exist_path(
     Ok(None)
 }
 
-async fn candidate_to_token(
+async fn candidate_to_resolved(
     candidate: &PathCandidate,
     path: &PathBuf,
     document: &Document,

@@ -6,7 +6,7 @@ use tower_lsp::lsp_types;
 use crate::Config;
 use crate::document::Document;
 use crate::error::*;
-use crate::logger::*;
+use crate::fs;
 use crate::resolver::resolve_at_pos;
 
 pub async fn provide_definition(
@@ -35,14 +35,7 @@ pub async fn provide_definition(
         lsp_types::Position::new(0, 0),
         lsp_types::Position::new(0, 0),
     );
-    let Ok(url) = lsp_types::Url::from_file_path(&current_token.target) else {
-        warn(format!(
-            "Failed to convert path to URL: {}",
-            current_token.target.display()
-        ))
-        .await;
-        return Ok(None);
-    };
+    let url = fs::path_to_url(&current_token.target)?;
 
     Ok(Some(lsp_types::GotoDefinitionResponse::Link(vec![
         lsp_types::LocationLink {

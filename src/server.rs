@@ -165,6 +165,7 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
+        info("Shutting down Path Server".to_string()).await;
         Ok(())
     }
 
