@@ -14,6 +14,7 @@ use crate::logger::*;
 pub struct Config {
     /// Base paths for relative path completion/highlight/jump.
     /// Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders.
+    /// The order determines the priority in suggestions.
     #[serde(alias = "basePath")]
     pub base_path: Vec<String>,
 
@@ -53,22 +54,25 @@ pub struct Highlight {
 }
 
 impl Config {
+    /// Iter all base path patterns in config and convert them into a vector.
+    /// Return (path, original_pattern, order)
     pub fn base_paths(
         &self,
         workspace_folders: &[String],
         document_parent: Option<&String>,
         user_home: Option<&String>,
-    ) -> Vec<PathBuf> {
+    ) -> Vec<(PathBuf, String, usize)> {
         self.base_path
             .iter()
-            .filter_map(|path| {
+            .enumerate()
+            .filter_map(|(index, path)| {
                 if path.contains("${workspaceFolder}") {
                     Some(
                         workspace_folders
                             .iter()
                             .map(|workspace_folder| {
                                 let expanded = path.replace("${workspaceFolder}", workspace_folder);
-                                PathBuf::from(expanded)
+                                (PathBuf::from(expanded), path.clone(), index)
                             })
                             .collect(),
                     )
@@ -76,7 +80,7 @@ impl Config {
                     match document_parent {
                         Some(parent) => {
                             let expanded = path.replace("${document}", parent);
-                            Some(vec![PathBuf::from(expanded)])
+                            Some(vec![(PathBuf::from(expanded), path.clone(), index)])
                         }
                         None => None,
                     }
@@ -84,12 +88,12 @@ impl Config {
                     match user_home {
                         Some(home) => {
                             let expanded = path.replace("${userHome}", home);
-                            Some(vec![PathBuf::from(expanded)])
+                            Some(vec![(PathBuf::from(expanded), path.clone(), index)])
                         }
                         None => None,
                     }
                 } else {
-                    Some(vec![PathBuf::from(path)])
+                    Some(vec![(PathBuf::from(path), path.clone(), index)])
                 }
             })
             .flatten()
@@ -110,7 +114,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            base_path: vec!["${workspaceFolder}".into(), "${document}".into()],
+            base_path: vec!["${document}".into(), "${workspaceFolder}".into()],
             completion: Completion {
                 max_results: 0,
                 show_hidden_files: true,
@@ -245,7 +249,7 @@ mod tests {
     fn test_default_config() {
         let default_json = r#"
         {
-            "base_path": ["${workspaceFolder}", "${document}"],
+            "base_path": ["${document}", "${workspaceFolder}"],
             "completion": {
                 "max_results": 0,
                 "show_hidden_files": true,
@@ -295,7 +299,13 @@ mod tests {
             "/absolute/path".into(),
         ];
 
-        assert_eq!(result, expected);
+        assert_eq!(
+            result
+                .into_iter()
+                .map(|(path, _, _)| path)
+                .collect::<Vec<_>>(),
+            expected
+        );
     }
 
     #[test]
@@ -322,7 +332,13 @@ mod tests {
 
         let expected: Vec<PathBuf> = vec!["/home/user/foo".into()];
 
-        assert_eq!(result, expected);
+        assert_eq!(
+            result
+                .into_iter()
+                .map(|(path, _, _)| path)
+                .collect::<Vec<_>>(),
+            expected
+        );
     }
 
     #[test]

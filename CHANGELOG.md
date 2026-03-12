@@ -2,6 +2,19 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **Core**: Support to provide hover information on paths.
+
+### Changed
+- **Core**: Change default build to single thread to reduce resource consumption. You can enable multi-threading by building with the `multi-thread` feature.
+
+### Improved
+- **Core**: Enhance completion UX：
+    - Added descriptions to completion items to show which `base_paths` they originated from.
+    - Improved suggestion ordering: entries now respect the order defined in the `base_path` configuration.
+    - Support filtering completion items based on `base_path` categories.
+
 ## [0.5.0] - 2026-03-11
 ### Added
 - **VS Code**: Included `CHANGELOG.md` inside package.

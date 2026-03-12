@@ -46,11 +46,11 @@
             "type": "string"
           },
           "default": [
-            "${workspaceFolder}",
-            "${document}"
+            "${document}",
+            "${workspaceFolder}"
           ],
           "order": 0,
-          "description": "Base paths for relative path completion, highlight and jump. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
+          "description": "Base paths for relative path completion, highlight and jump. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders. The order determines the priority in suggestions."
         },
         "path-server.completion.maxResults": {
           "type": "number",

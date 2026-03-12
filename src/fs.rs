@@ -67,14 +67,14 @@ pub fn is_hidden_file(path: &Path) -> PathServerResult<bool> {
     Ok(false)
 }
 
-// pub fn path_to_url(path: &PathBuf) -> PathServerResult<lsp_types::Url> {
-//     lsp_types::Url::from_file_path(path).map_err(|_| {
-//         PathServerError::InvalidPath(format!(
-//             "Failed to convert file path to URL: {}",
-//             path.display()
-//         ))
-//     })
-// }
+pub fn path_to_url(path: &PathBuf) -> PathServerResult<lsp_types::Url> {
+    lsp_types::Url::from_file_path(path).map_err(|_| {
+        PathServerError::InvalidPath(format!(
+            "Failed to convert file path to URL: {}",
+            path.display()
+        ))
+    })
+}
 
 #[cfg(test)]
 mod tests {

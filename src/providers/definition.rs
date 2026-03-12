@@ -6,9 +6,8 @@ use tower_lsp::lsp_types;
 use crate::Config;
 use crate::document::Document;
 use crate::error::*;
-use crate::logger::*;
-use crate::resolver::PathToken;
-use crate::resolver::get_or_resolve_tokens;
+use crate::fs;
+use crate::resolver::resolve_at_pos;
 
 pub async fn provide_definition(
     doc: &Document,
@@ -18,32 +17,14 @@ pub async fn provide_definition(
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Option<lsp_types::GotoDefinitionResponse>> {
-    let tokens = get_or_resolve_tokens(doc, config, workspace_roots, doc_path).await?;
-    let filtered = tokens
-        .iter()
-        .filter(|t| config.highlight.highlight_directory || !t.is_dir);
-
-    let current_token: Vec<&PathToken> = filtered
-        .filter(|token| cursor_inside(line, character, token))
-        .collect();
-
-    if current_token.is_empty() {
-        return Ok(None);
-    }
-
-    if current_token.len() != 1 {
-        unreachable!("Expected exactly one token, found {}", current_token.len());
-    }
-
-    let current_token = current_token[0];
-    let Ok(url) = lsp_types::Url::from_file_path(&current_token.target) else {
-        warn(format!(
-            "Failed to convert path to URL: {}",
-            current_token.target.display()
-        ))
-        .await;
+    let Some(current_token) =
+        resolve_at_pos(doc, config, workspace_roots, doc_path, (line, character)).await?
+    else {
         return Ok(None);
     };
+    if !config.highlight.highlight_directory && current_token.is_dir {
+        return Ok(None);
+    }
     let origin_start =
         lsp_types::Position::new(current_token.start.0 as u32, current_token.start.1 as u32);
     let origin_end =
@@ -54,6 +35,7 @@ pub async fn provide_definition(
         lsp_types::Position::new(0, 0),
         lsp_types::Position::new(0, 0),
     );
+    let url = fs::path_to_url(&current_token.target)?;
 
     Ok(Some(lsp_types::GotoDefinitionResponse::Link(vec![
         lsp_types::LocationLink {
@@ -63,29 +45,6 @@ pub async fn provide_definition(
             target_selection_range: target_range,
         },
     ])))
-}
-
-fn cursor_inside(cursor_line: usize, cursor_character: usize, token: &PathToken) -> bool {
-    let (start_line, start_character) = token.start;
-    let (end_line, end_character) = token.end;
-    if cursor_line < start_line || cursor_line > end_line {
-        // quick path: cursor do not in the token lines
-        return false;
-    };
-    if start_line == end_line {
-        // single line token, most frequent case
-        return start_line == cursor_line
-            && cursor_character >= start_character
-            && cursor_character < end_character;
-    };
-    // multi-line token
-    if cursor_line == start_line {
-        return cursor_character >= start_character;
-    }
-    if cursor_line == end_line {
-        return cursor_character < end_character;
-    }
-    true
 }
 
 #[cfg(test)]
