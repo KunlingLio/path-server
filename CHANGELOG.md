@@ -2,7 +2,7 @@
 
 All notable changes to the Path Server will be documented in this file.
 
-## [Unreleased]
+## [0.5.1] - 2026-03-12
 ### Added
 - **Core**: Support to provide hover information on paths.
 - **Core**: Added tree-sitter markdown support.
@@ -15,6 +15,7 @@ All notable changes to the Path Server will be documented in this file.
     - Added descriptions to completion items to show which `base_paths` they originated from.
     - Improved suggestion ordering: entries now respect the order defined in the `base_path` configuration.
     - Support filtering completion items based on `base_path` categories.
+- Add demo gif in README and reorganize README for more information.
 
 ## [0.5.0] - 2026-03-11
 ### Added
