@@ -86,7 +86,7 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::InitializeParams,
     ) -> jsonrpc::Result<lsp_types::InitializeResult> {
-        info(format!("Initializing Path Server")).await;
+        info("Initializing Path Server".to_string()).await;
         // set editor env
         let client_env = self.parse_client_env(&params);
         info(format!("Client Env: {}", client_env)).await;
