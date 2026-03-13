@@ -238,8 +238,17 @@ fn extract_strings_markdown(
                     }
                 }
             }
+            strings.extend(split(
+                node_text,
+                &PathCandidate {
+                    content: node_text.to_string(),
+                    start_byte: effective_node.start_byte(),
+                    end_byte: effective_node.end_byte(),
+                },
+                &[' ', '\n'],
+            ));
         }
-        "code_block" | "fenced_code_block" => {
+        "code_block" | "fenced_code_block" | "html_block" => {
             // split by space and \n
             let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
             strings.extend(split(
@@ -652,6 +661,7 @@ The **Path Server** project is organized in mono-repository structure with core 
 - The **Zed Extension** is located in `./extensions/zed`.
 - The **VS Code** is located in `./extensions/vscode`.
 
+> Quote: ./extensions/vscode/more
         "#;
         print_tree(&Language::markdown, complicated_case);
         let res = parse_and_extract(Language::markdown, complicated_case);
@@ -664,6 +674,24 @@ The **Path Server** project is organized in mono-repository structure with core 
             res.iter()
                 .any(|c| c.content.contains("./extensions/vscode")),
             "missing path in VS Code extension"
+        );
+        assert!(
+            res.iter()
+                .any(|c| c.content.contains("./extensions/vscode/more")),
+            "missing path in quote"
+        );
+        let md_with_html = r#"
+<div align="center">
+    <img src="./resources/demo.gif" alt="demo" style="width: 600px">
+</div>
+"#;
+        print_tree(&Language::markdown, md_with_html);
+        let res = parse_and_extract(Language::markdown, md_with_html);
+        // eprintln!("{:?}", res);
+        assert!(
+            res.iter()
+                .any(|c| c.content.contains("./resources/demo.gif")),
+            "missing path in HTML block"
         );
     }
 }

@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+## Fixed
+- **Core**: Fixed an issue where path in markdown quote and html block may not extract correctly.
+
 ## [0.5.1] - 2026-03-12
 ### Added
 - **Core**: Support to provide hover information on paths.
