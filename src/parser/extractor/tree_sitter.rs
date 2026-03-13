@@ -248,7 +248,36 @@ fn extract_strings_markdown(
                 &[' ', '\n'],
             ));
         }
-        "code_block" | "fenced_code_block" | "html_block" => {
+        "html_block" => {
+            // extract paths from HTML content
+            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
+            let offset = effective_node.start_byte();
+            let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
+
+            for pattern in regex {
+                let re = Regex::new(pattern).unwrap();
+                for cap in re.captures_iter(node_text) {
+                    if let Some(inner) = cap.get(1) {
+                        let content = inner.as_str();
+                        strings.insert(PathCandidate {
+                            content: content.to_string(),
+                            start_byte: offset + inner.start(),
+                            end_byte: offset + inner.end(),
+                        });
+                    }
+                }
+            }
+            strings.extend(split(
+                node_text,
+                &PathCandidate {
+                    content: node_text.to_string(),
+                    start_byte: effective_node.start_byte(),
+                    end_byte: effective_node.end_byte(),
+                },
+                &[' ', '\n'],
+            ));
+        }
+        "code_block" | "fenced_code_block" => {
             // split by space and \n
             let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
             strings.extend(split(
@@ -301,10 +330,18 @@ fn extract_string_content(
     let mut candidates = Vec::new();
     let mut cursor = node.walk();
     let mut begin_byte = node.start_byte();
-    for child in node.children(&mut cursor) {
+    let mut end_byte = node.end_byte();
+    for (i, child) in node.children(&mut cursor).enumerate() {
+        if i == 0 {
+            begin_byte = child.start_byte();
+        }
+        if i == node.child_count() - 1 {
+            end_byte = child.end_byte();
+        }
         if is_string_fragment_node(&child, language) {
             continue;
-        } else if !is_escaped_character_node(&child, language) {
+        }
+        if !is_escaped_character_node(&child, language) {
             // is not a string fragment or escaped character, treat it as a separator
             // the content before it is a candidate
             if child.start_byte() > begin_byte {
@@ -323,14 +360,11 @@ fn extract_string_content(
         }
     }
     // add the last candidate after the last fragment
-    if begin_byte < node.end_byte() {
+    if begin_byte < end_byte {
         let candidate = PathCandidate {
-            content: source
-                .get(begin_byte..node.end_byte())
-                .unwrap_or("")
-                .to_string(),
+            content: source.get(begin_byte..end_byte).unwrap_or("").to_string(),
             start_byte: begin_byte,
-            end_byte: node.end_byte(),
+            end_byte: end_byte,
         };
         candidates.push(candidate);
     }
@@ -474,7 +508,7 @@ mod tests {
         print_tree(&Language::javascript, normal_src);
         let res = parse_and_extract(Language::javascript, normal_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello world")),
+            res.iter().any(|c| c.content == "hello world"),
             "missing 'hello world' fragment"
         );
         // template string with interpolation
@@ -482,11 +516,11 @@ mod tests {
         print_tree(&Language::javascript, template_src);
         let res = parse_and_extract(Language::javascript, template_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
-            "missing 'hello' fragment"
+            res.iter().any(|c| c.content == "hello "),
+            "missing 'hello ' fragment"
         );
         assert!(
-            res.iter().any(|c| c.content.contains(" world")),
+            res.iter().any(|c| c.content == " world"),
             "missing ' world' fragment"
         );
         // string with escaped characters
@@ -494,7 +528,7 @@ mod tests {
         print_tree(&Language::javascript, escape_src);
         let res = parse_and_extract(Language::javascript, escape_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
         );
     }
@@ -506,7 +540,7 @@ mod tests {
         print_tree(&Language::typescript, normal_src);
         let res = parse_and_extract(Language::typescript, normal_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello world")),
+            res.iter().any(|c| c.content == "hello world"),
             "missing 'hello world' fragment"
         );
         // template string with interpolation
@@ -514,11 +548,11 @@ mod tests {
         print_tree(&Language::typescript, template_src);
         let res = parse_and_extract(Language::typescript, template_src);
         assert!(
-            res.iter().any(|c| c.content.contains("ts ")),
+            res.iter().any(|c| c.content == "ts "),
             "missing 'ts ' fragment"
         );
         assert!(
-            res.iter().any(|c| c.content.contains(" end")),
+            res.iter().any(|c| c.content == " end"),
             "missing ' end' fragment"
         );
         // string with escaped characters
@@ -526,7 +560,7 @@ mod tests {
         print_tree(&Language::typescript, escape_src);
         let res = parse_and_extract(Language::typescript, escape_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
         );
     }
@@ -541,17 +575,10 @@ mod tests {
         "#;
         print_tree(&Language::python, normal_src);
         let res = parse_and_extract(Language::python, normal_src);
+        assert!(res.iter().any(|c| c.content == "hello"), "missing 'hello'");
+        assert!(res.iter().any(|c| c.content == "world"), "missing 'world'");
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
-            "missing 'hello'"
-        );
-        assert!(
-            res.iter().any(|c| c.content.contains("world")),
-            "missing 'world'"
-        );
-        assert!(
-            res.iter()
-                .any(|c| c.content.trim().contains(r#"multi\nline"#)),
+            res.iter().any(|c| c.content.trim() == r#"multi\nline"#),
             "missing 'multi\nline' in triple-quoted string"
         );
         // f-string
@@ -559,7 +586,7 @@ mod tests {
         print_tree(&Language::python, f_string_src);
         let res = parse_and_extract(Language::python, f_string_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
+            res.iter().any(|c| c.content == "hello "),
             "missing 'hello' in f-string"
         );
         // string with escaped characters
@@ -567,7 +594,7 @@ mod tests {
         print_tree(&Language::python, escape_src);
         let res = parse_and_extract(Language::python, escape_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
         );
     }
@@ -577,19 +604,16 @@ mod tests {
         let src = "let a = \"hello\"; let b = r#\"raw content\"#";
         print_tree(&Language::rust, src);
         let res = parse_and_extract(Language::rust, src);
+        assert!(res.iter().any(|c| c.content == "hello"), "missing 'hello'");
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
-            "missing 'hello'"
-        );
-        assert!(
-            res.iter().any(|c| c.content.contains("raw content")),
+            res.iter().any(|c| c.content == "raw content"),
             "missing raw string content"
         );
         let escaped_src = "let s = \"line1\\\\nline2\";";
         print_tree(&Language::rust, escaped_src);
         let res = parse_and_extract(Language::rust, escaped_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\nline2")),
+            res.iter().any(|c| c.content == "line1\\\\nline2"),
             "missing 'line1\\\\nline2' with escaped newline"
         );
     }
@@ -600,7 +624,7 @@ mod tests {
         print_tree(&Language::markdown, link);
         let res = parse_and_extract(Language::markdown, link);
         assert!(
-            res.iter().any(|c| c.content.contains("./public/image.png")),
+            res.iter().any(|c| c.content == "./public/image.png"),
             "missing link destination"
         );
         let text_in_quotes = "some text and `./public/image1.png`\nmore text and './public/image2.png'\n even more and \"./public/image3.png\"";
@@ -608,29 +632,23 @@ mod tests {
         let res = parse_and_extract(Language::markdown, text_in_quotes);
         eprintln!("{:?}", res);
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./public/image1.png")),
+            res.iter().any(|c| c.content == "./public/image1.png"),
             "missing path in code span"
         );
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./public/image2.png")),
+            res.iter().any(|c| c.content == "./public/image2.png"),
             "missing path in code span"
         );
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./public/image3.png")),
+            res.iter().any(|c| c.content == "./public/image3.png"),
             "missing path in code span"
         );
         let text_in_starts = "some text and *bold* and **strong**";
         print_tree(&Language::markdown, text_in_starts);
         let res = parse_and_extract(Language::markdown, text_in_starts);
+        assert!(res.iter().any(|c| c.content == "bold"), "missing bold text");
         assert!(
-            res.iter().any(|c| c.content.contains("bold")),
-            "missing bold text"
-        );
-        assert!(
-            res.iter().any(|c| c.content.contains("strong")),
+            res.iter().any(|c| c.content == "strong"),
             "missing strong text"
         );
         let common_path_in_text = r#"
@@ -643,8 +661,7 @@ cd ./extensions/vscode/
         print_tree(&Language::markdown, common_path_in_text);
         let res = parse_and_extract(Language::markdown, common_path_in_text);
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./extensions/vscode/")),
+            res.iter().any(|c| c.content == "./extensions/vscode/"),
             "missing path in code block"
         );
         let complicated_case = r#"
@@ -667,30 +684,31 @@ The **Path Server** project is organized in mono-repository structure with core 
         let res = parse_and_extract(Language::markdown, complicated_case);
         eprintln!("{:?}", res);
         assert!(
-            res.iter().any(|c| c.content.contains("./extensions/zed")),
+            res.iter().any(|c| c.content == "./extensions/zed"),
             "missing path in Zed extension"
         );
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./extensions/vscode")),
+            res.iter().any(|c| c.content == "./extensions/vscode"),
             "missing path in VS Code extension"
         );
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./extensions/vscode/more")),
+            res.iter().any(|c| c.content == "./extensions/vscode/more"),
             "missing path in quote"
         );
         let md_with_html = r#"
+# Project Timer
+
+Project Timer is a lightweight VS Code extension that tracks the time you spend on your projects. It provides detailed insights into your productivity by analyzing your coding activity by dates, programming languages and specific files.
+
 <div align="center">
     <img src="./resources/demo.gif" alt="demo" style="width: 600px">
 </div>
 "#;
         print_tree(&Language::markdown, md_with_html);
         let res = parse_and_extract(Language::markdown, md_with_html);
-        // eprintln!("{:?}", res);
+        eprintln!("{:?}", res);
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./resources/demo.gif")),
+            res.iter().any(|c| c.content == "./resources/demo.gif"),
             "missing path in HTML block"
         );
     }
