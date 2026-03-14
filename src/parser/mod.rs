@@ -99,14 +99,14 @@ impl PathCandidate {
         }
     }
 
-    pub fn split(&self, content: &str, delimiter: &[char]) -> Vec<PathCandidate> {
+    pub fn split(&self, delimiter: &[char]) -> Vec<PathCandidate> {
         let mut results = Vec::new();
         let mut last_pos = 0;
 
-        while let Some(pos) = content[last_pos..].find(|c| delimiter.contains(&c)) {
+        while let Some(pos) = self.content[last_pos..].find(|c| delimiter.contains(&c)) {
             let end = last_pos + pos;
             if end > last_pos {
-                let sub_content = &content[last_pos..end];
+                let sub_content = &self.content[last_pos..end];
                 if sub_content.contains('/') || sub_content.contains('\\') {
                     let trimmed = PathCandidate {
                         content: sub_content.to_string(),
@@ -123,13 +123,13 @@ impl PathCandidate {
         }
 
         // process last part
-        if last_pos < content.len() {
-            let sub_content = &content[last_pos..];
+        if last_pos < self.content.len() {
+            let sub_content = &self.content[last_pos..];
             if sub_content.contains('/') || sub_content.contains('\\') {
                 let trimmed = PathCandidate {
                     content: sub_content.to_string(),
                     start_byte: self.start_byte + last_pos,
-                    end_byte: self.start_byte + content.len(),
+                    end_byte: self.start_byte + self.content.len(),
                 }
                 .trim();
                 if !trimmed.content.is_empty() {

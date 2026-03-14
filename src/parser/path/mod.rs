@@ -39,7 +39,7 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
     }
 
     // Level 2: the part of string (split by space) is a path or not
-    results.extend(path_ref.split(content, &[' ', '\n']));
+    results.extend(path_ref.split(&[' ', '\n']));
 
     results
 }

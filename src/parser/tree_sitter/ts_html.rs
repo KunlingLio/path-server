@@ -57,6 +57,7 @@ fn extract_string_content(source: &str, node: &tree_sitter::Node) -> Vec<PathCan
         let node_text = &source[node.start_byte()..node.end_byte()];
         let offset = node.start_byte();
         let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
+        // TODO: avoid compiling regex each iteration
 
         for pattern in regex {
             let re = Regex::new(pattern).unwrap();
@@ -77,7 +78,7 @@ fn extract_string_content(source: &str, node: &tree_sitter::Node) -> Vec<PathCan
                 start_byte: node.start_byte(),
                 end_byte: node.end_byte(),
             }
-            .split(node_text, &[' ', '\n']),
+            .split(&[' ', '\n']),
         );
     }
     candidates

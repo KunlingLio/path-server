@@ -89,6 +89,7 @@ pub fn extract_strings(
             let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
             let offset = effective_node.start_byte();
             let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
+            // TODO: avoid compiling regex each iteration
 
             for pattern in regex {
                 let re = Regex::new(pattern).unwrap();
@@ -109,7 +110,7 @@ pub fn extract_strings(
                     start_byte: effective_node.start_byte(),
                     end_byte: effective_node.end_byte(),
                 }
-                .split(node_text, &[' ', '\n']),
+                .split(&[' ', '\n']),
             );
         }
         "html_block" => {
@@ -137,7 +138,7 @@ pub fn extract_strings(
                     start_byte: effective_node.start_byte(),
                     end_byte: effective_node.end_byte(),
                 }
-                .split(node_text, &[' ', '\n']),
+                .split(&[' ', '\n']),
             );
         }
         "code_block" | "fenced_code_block" => {
@@ -149,7 +150,7 @@ pub fn extract_strings(
                     start_byte: effective_node.start_byte(),
                     end_byte: effective_node.end_byte(),
                 }
-                .split(node_text, &[' ', '\n']),
+                .split(&[' ', '\n']),
             );
         }
         _ => {}
