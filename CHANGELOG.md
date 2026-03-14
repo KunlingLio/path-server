@@ -6,6 +6,7 @@ All notable changes to the Path Server will be documented in this file.
 ## Fixed
 - **Core**: Fixed an issue where path in markdown quote and html block may not extract correctly.
 - **Core**: Fixed an issue where raw string in rust may not extract correctly.
+- **Core**: Added deduplication into parser to avoid unnecessary resolving performance costs.
 
 ## Added
 - **Core**: Add tree-sitter HTML, C, and C++ support.

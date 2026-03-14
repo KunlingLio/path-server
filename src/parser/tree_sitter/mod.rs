@@ -6,6 +6,8 @@ mod ts_markdown;
 use crate::document::{Document, Language};
 use crate::error::*;
 
+use std::collections::HashSet;
+
 use super::PathCandidate;
 
 /// Tree sitter languages
@@ -153,28 +155,23 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
         return Ok(None);
     };
 
-    match document.language {
-        Language::markdown => Ok(Some(ts_markdown::extract_strings(
-            &document.text,
-            &tree.root_node(),
-        )?)),
-        Language::html => Ok(Some(ts_html::extract_strings(
-            &document.text,
-            &tree.root_node(),
-            &document.language,
-        ))),
+    let candidates = match document.language {
+        Language::markdown => ts_markdown::extract_strings(&document.text, &tree.root_node())?,
+        Language::html => {
+            ts_html::extract_strings(&document.text, &tree.root_node(), &document.language)
+        }
         Language::javascript
         | Language::typescript
         | Language::python
         | Language::rust
         | Language::c
-        | Language::c_plus_plus => Ok(Some(ts_general::extract_strings(
-            &document.text,
-            &tree.root_node(),
-            &document.language,
-        ))),
+        | Language::c_plus_plus => {
+            ts_general::extract_strings(&document.text, &tree.root_node(), &document.language)
+        }
         _ => unreachable!("Unsupported language: {}", document.language),
-    }
+    };
+    let deduplicated: HashSet<PathCandidate> = HashSet::from_iter(candidates);
+    Ok(Some(deduplicated.into_iter().collect()))
 }
 
 #[cfg(test)]
