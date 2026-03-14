@@ -1,15 +1,15 @@
-use std::collections::HashSet;
-
-use regex::Regex;
+//! Extract strings token by tree-sitter lib
+mod ts_general;
+mod ts_html;
+mod ts_markdown;
 
 use crate::document::{Document, Language};
 use crate::error::*;
 
-use super::super::PathCandidate;
-use super::super::split;
+use super::PathCandidate;
 
 /// Tree sitter languages
-mod ts_languages {
+pub mod ts_languages {
     use crate::document::Language;
     use std::sync::OnceLock;
 
@@ -137,340 +137,26 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
         return Ok(None);
     };
 
-    if document.language == Language::markdown {
-        Ok(Some(extract_strings_markdown(
+    match document.language {
+        Language::markdown => Ok(Some(ts_markdown::extract_strings(
             &document.text,
             &tree.root_node(),
-        )?))
-    } else {
-        Ok(Some(extract_strings_normal(
+        )?)),
+        Language::html => Ok(Some(ts_html::extract_strings(
             &document.text,
             &tree.root_node(),
             &document.language,
-        )))
+        ))),
+        Language::javascript | Language::typescript | Language::python | Language::rust => {
+            Ok(Some(ts_general::extract_strings(
+                &document.text,
+                &tree.root_node(),
+                &document.language,
+            )))
+        }
+        _ => unreachable!("Unsupported language: {}", document.language),
     }
 }
-
-fn extract_strings_markdown(
-    source: &str,
-    node: &tree_sitter::Node,
-) -> PathServerResult<Vec<PathCandidate>> {
-    // if inline node, parse it first
-    let inline_tree = if node.kind() == "inline" {
-        let mut inline_parser = tree_sitter::Parser::new();
-        inline_parser
-            .set_language(&ts_languages::get_md_inline_language())
-            .map_err(|_| PathServerError::ParseError("Failed to set inline language".into()))?;
-        inline_parser
-            .set_included_ranges(&[node.range()])
-            .map_err(|_| PathServerError::ParseError("Failed to set ranges".into()))?;
-        Some(
-            inline_parser
-                .parse(source, None)
-                .ok_or(PathServerError::ParseError("Failed to parse inline".into()))?,
-        )
-    } else {
-        None
-    };
-
-    let effective_node = inline_tree.as_ref().map(|t| t.root_node()).unwrap_or(*node);
-
-    // extract strings
-    let mut strings = HashSet::new();
-    match effective_node.kind() {
-        "link_destination" => {
-            // extract content of link_destination
-            return Ok(vec![PathCandidate {
-                content: source[effective_node.start_byte()..effective_node.end_byte()].to_string(),
-                start_byte: effective_node.start_byte(),
-                end_byte: effective_node.end_byte(),
-            }]);
-        }
-        "code_span" => {
-            // resolve the content except code_span_delimiter
-            let mut content_start = effective_node.start_byte();
-            let mut content_end = effective_node.end_byte();
-            let mut cursor = effective_node.walk();
-            for child in effective_node.children(&mut cursor) {
-                if child.kind() == "code_span_delimiter" {
-                    if child.start_byte() == effective_node.start_byte() {
-                        content_start = child.end_byte();
-                    }
-                    if child.end_byte() == effective_node.end_byte() {
-                        content_end = child.start_byte();
-                    }
-                }
-            }
-            return Ok(vec![PathCandidate {
-                content: source[content_start..content_end].to_string(),
-                start_byte: content_start,
-                end_byte: content_end,
-            }]);
-        }
-        "emphasis" => {
-            // strip *text* or _text_
-            let inner_start = effective_node.start_byte() + 1;
-            let inner_end = effective_node.end_byte() - 1;
-            return Ok(vec![PathCandidate {
-                content: source[inner_start..inner_end].to_string(),
-                start_byte: inner_start,
-                end_byte: inner_end,
-            }]);
-        }
-        "strong_emphasis" => {
-            // strip **text** or __text__
-            let inner_start = effective_node.start_byte() + 2;
-            let inner_end = effective_node.end_byte() - 2;
-            return Ok(vec![PathCandidate {
-                content: source[inner_start..inner_end].to_string(),
-                start_byte: inner_start,
-                end_byte: inner_end,
-            }]);
-        }
-        "inline" if inline_tree.is_some() => {
-            // fall back extractor
-            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
-            let offset = effective_node.start_byte();
-            let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
-
-            for pattern in regex {
-                let re = Regex::new(pattern).unwrap();
-                for cap in re.captures_iter(node_text) {
-                    if let Some(inner) = cap.get(1) {
-                        let content = inner.as_str();
-                        strings.insert(PathCandidate {
-                            content: content.to_string(),
-                            start_byte: offset + inner.start(),
-                            end_byte: offset + inner.end(),
-                        });
-                    }
-                }
-            }
-            strings.extend(split(
-                node_text,
-                &PathCandidate {
-                    content: node_text.to_string(),
-                    start_byte: effective_node.start_byte(),
-                    end_byte: effective_node.end_byte(),
-                },
-                &[' ', '\n'],
-            ));
-        }
-        "html_block" => {
-            // extract paths from HTML content
-            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
-            let offset = effective_node.start_byte();
-            let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
-
-            for pattern in regex {
-                let re = Regex::new(pattern).unwrap();
-                for cap in re.captures_iter(node_text) {
-                    if let Some(inner) = cap.get(1) {
-                        let content = inner.as_str();
-                        strings.insert(PathCandidate {
-                            content: content.to_string(),
-                            start_byte: offset + inner.start(),
-                            end_byte: offset + inner.end(),
-                        });
-                    }
-                }
-            }
-            strings.extend(split(
-                node_text,
-                &PathCandidate {
-                    content: node_text.to_string(),
-                    start_byte: effective_node.start_byte(),
-                    end_byte: effective_node.end_byte(),
-                },
-                &[' ', '\n'],
-            ));
-        }
-        "code_block" | "fenced_code_block" => {
-            // split by space and \n
-            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
-            strings.extend(split(
-                node_text,
-                &PathCandidate {
-                    content: node_text.to_string(),
-                    start_byte: effective_node.start_byte(),
-                    end_byte: effective_node.end_byte(),
-                },
-                &[' ', '\n'],
-            ));
-        }
-        _ => {}
-    }
-
-    // recursively process children
-    let mut cursor = effective_node.walk();
-    for child in effective_node.children(&mut cursor) {
-        strings.extend(extract_strings_markdown(source, &child)?);
-    }
-
-    Ok(strings.into_iter().collect::<Vec<_>>())
-}
-
-/// Recursively walk the syntax tree and extract string nodes
-fn extract_strings_normal(
-    source: &str,
-    node: &tree_sitter::Node,
-    language: &Language,
-) -> Vec<PathCandidate> {
-    let mut strings = Vec::new();
-    // check if this node is a string
-    if is_string_node(node, language) {
-        strings.extend(extract_string_content(source, node, language));
-    }
-
-    // recursively process children
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        strings.extend(extract_strings_normal(source, &child, language));
-    }
-    strings
-}
-
-fn extract_string_content(
-    source: &str,
-    node: &tree_sitter::Node,
-    language: &Language,
-) -> Vec<PathCandidate> {
-    let mut candidates = Vec::new();
-    let mut cursor = node.walk();
-    let mut begin_byte = node.start_byte();
-    let mut end_byte = node.end_byte();
-    let mut have_string_fragment = false;
-    for child in node.children(&mut cursor) {
-        eprintln!("Child kind: {}", child.kind());
-
-        if is_string_fragment_node(&child, language) {
-            if !have_string_fragment {
-                begin_byte = child.start_byte();
-                have_string_fragment = true;
-            }
-            // if i == node.child_count() - 1 {
-            end_byte = child.end_byte();
-            // }
-            continue;
-        }
-        if !is_escaped_character_node(&child, language) {
-            // is not a string fragment or escaped character, treat it as a separator
-            // the content before it is a candidate
-            if child.start_byte() > begin_byte {
-                // only add candidate if there is content before the separator
-                let candidate = PathCandidate {
-                    content: source
-                        .get(begin_byte..child.start_byte())
-                        .unwrap_or("")
-                        .to_string(),
-                    start_byte: begin_byte,
-                    end_byte: child.start_byte(),
-                };
-                candidates.push(candidate);
-            }
-            begin_byte = child.end_byte();
-        }
-    }
-    // add the last candidate after the last fragment
-    if begin_byte < end_byte {
-        let candidate = PathCandidate {
-            content: source.get(begin_byte..end_byte).unwrap_or("").to_string(),
-            start_byte: begin_byte,
-            end_byte: end_byte,
-        };
-        candidates.push(candidate);
-    }
-    // fall back regex parse
-    if need_regex_parse(node, language) {
-        // parse based on `'` and `"` and space
-        let node_text = &source[node.start_byte()..node.end_byte()];
-        let offset = node.start_byte();
-        let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
-
-        for pattern in regex {
-            let re = Regex::new(pattern).unwrap();
-            for cap in re.captures_iter(node_text) {
-                if let Some(inner) = cap.get(1) {
-                    let content = inner.as_str();
-                    candidates.push(PathCandidate {
-                        content: content.to_string(),
-                        start_byte: offset + inner.start(),
-                        end_byte: offset + inner.end(),
-                    });
-                }
-            }
-        }
-        candidates.extend(split(
-            node_text,
-            &PathCandidate {
-                content: node_text.to_string(),
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-            },
-            &[' ', '\n'],
-        ));
-    }
-    candidates
-}
-
-/// Determine if a node represents a string literal
-fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
-    let kind = node.kind();
-    match language {
-        Language::javascript | Language::typescript => {
-            kind == "string" || kind == "template_string"
-        }
-        Language::python => kind == "string",
-        Language::rust => kind == "string_literal" || kind == "raw_string_literal",
-        Language::markdown => unreachable!("is_string_node called with markdown language"),
-        Language::html => kind == "text" || kind == "quoted_attribute_value",
-        _ => false,
-    }
-}
-
-/// Determine if a node represents a part of string literal
-fn is_string_fragment_node(node: &tree_sitter::Node, language: &Language) -> bool {
-    let kind = node.kind();
-    match language {
-        Language::javascript | Language::typescript => kind == "string_fragment",
-        Language::python => kind == "string_content",
-        Language::rust => kind == "string_content",
-        Language::markdown => unreachable!("is_string_fragment_node called with markdown language"),
-        Language::html => kind == "attribute_value",
-        _ => unreachable!("is_string_fragment_node called with unsupported language"),
-    }
-}
-
-/// Determine if a node represents an escaped character in a string
-/// This will be included in the path candidate
-fn is_escaped_character_node(node: &tree_sitter::Node, language: &Language) -> bool {
-    let kind = node.kind();
-    match language {
-        Language::javascript | Language::typescript => kind == "escape_sequence",
-        Language::python => kind == "escape_sequence",
-        Language::rust => kind == "escape_sequence",
-        Language::markdown => {
-            unreachable!("is_escaped_character_node called with markdown language")
-        }
-        Language::html => true,
-        _ => unreachable!("is_escaped_character_node called with unsupported language"),
-    }
-}
-
-fn need_regex_parse(node: &tree_sitter::Node, language: &Language) -> bool {
-    match language {
-        Language::javascript | Language::typescript => false,
-        Language::python => false,
-        Language::rust => false,
-        Language::markdown => {
-            unreachable!("need_regex_parse called with markdown language")
-        }
-        Language::html => node.kind() == "text",
-        _ => unreachable!("need_regex_parse called with unsupported language"),
-    }
-}
-
-// TODO: tree-sitter-html
 
 #[cfg(test)]
 mod tests {
