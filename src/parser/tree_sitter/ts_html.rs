@@ -47,7 +47,7 @@ fn extract_string_content(source: &str, node: &tree_sitter::Node) -> Vec<PathCan
         let candidate = PathCandidate {
             content: source.get(begin_byte..end_byte).unwrap_or("").to_string(),
             start_byte: begin_byte,
-            end_byte: end_byte,
+            end_byte,
         };
         candidates.push(candidate);
     }
