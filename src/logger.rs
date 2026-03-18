@@ -13,8 +13,21 @@ pub fn init(client: &tower_lsp::Client) {
 macro_rules! lsp_debug {
     ($($arg:tt)*) => {
         {
-            let fn_name = $crate::__function_name!();
-            $crate::logger::__debug(format!("{}() {} ({}:{})", fn_name, format!($($arg)*), file!(), line!()))
+            #[cfg(debug_assertions)]
+            {
+                let fn_name = $crate::__function_name!();
+                $crate::logger::__debug(format!(
+                    "{}() {} ({}:{})",
+                    fn_name,
+                    format_args!($($arg)*),
+                    file!(),
+                    line!(),
+                ))
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                async { () }
+            }
         }
     };
 }
@@ -53,10 +66,8 @@ macro_rules! to_sync {
     };
 }
 
+#[doc(hidden)]
 pub async fn __debug(message: String) {
-    if !cfg!(debug_assertions) {
-        return;
-    }
     if cfg!(test) {
         println!("[DEBUG] {}", message);
         return;
@@ -70,6 +81,7 @@ pub async fn __debug(message: String) {
     }
 }
 
+#[doc(hidden)]
 pub async fn __info(message: String) {
     if cfg!(test) {
         eprintln!("[INFO] {}", message);
@@ -84,6 +96,7 @@ pub async fn __info(message: String) {
     }
 }
 
+#[doc(hidden)]
 pub async fn __warn(message: String) {
     if cfg!(test) {
         eprintln!("[WARN] {}", message);
@@ -98,6 +111,7 @@ pub async fn __warn(message: String) {
     }
 }
 
+#[doc(hidden)]
 pub async fn __error(message: String) {
     if cfg!(test) {
         eprintln!("[ERROR] {}", message);
@@ -112,10 +126,12 @@ pub async fn __error(message: String) {
     }
 }
 
+#[doc(hidden)]
 pub fn __type_name_of<T>(_: T) -> &'static str {
     std::any::type_name::<T>()
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __function_name {
     () => {{
