@@ -16,8 +16,8 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
 - **Path highlight and jump**: Automatically detects and underlines valid file paths in the editor, making them clickable for direct navigation.
 - **Fast and Lightweight**: Native-level response speed. Consumes only ~10MB memory with very low CPU usage.
-- **Language Compatibility**: Supports all text files, regardless of the programming language.
-- **Cross IDEs**: Works seamlessly with any editor that supports the Language Server Protocol (e.g., VS Code, Zed, Neovim).
+- **Language Compatibility**: Supports all text files, regardless of programming languages.
+- **Cross IDEs**: Works seamlessly with any editors that support the Language Server Protocol (e.g., VS Code, Zed, Neovim).
 
 ## Support Platforms
 | Platform | x86_64 | Aarch64 |
@@ -112,7 +112,7 @@ You can customize Path Server's behavior via your editor's settings.
 - [x] Automatically trigger next completion.
 - [x] Implement "Go to Definition" for file paths.
 - [x] Support path highlight.
-- [ ] Support remote URL.
+- [x] Support remote window.
 - [ ] **Zed**: Support all language by use "wildcard" in extension.toml (Waiting for Zed extension api support)
 
 ## Development
