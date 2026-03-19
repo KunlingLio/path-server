@@ -1,6 +1,3 @@
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-
 use tower_lsp::lsp_types;
 
 use crate::Config;
@@ -11,14 +8,14 @@ use crate::resolver;
 
 pub async fn provide_definition(
     doc: &Document,
-    doc_path: &Path,
+    parent: &Option<String>,
     line: usize,
     character: usize,
     config: &Config,
-    workspace_roots: &HashSet<PathBuf>,
+    workspace_roots: &[String],
 ) -> PathServerResult<Option<lsp_types::GotoDefinitionResponse>> {
     let Some(current_token) =
-        resolver::resolve_at_pos(doc, config, workspace_roots, doc_path, (line, character)).await?
+        resolver::resolve_at_pos(doc, config, workspace_roots, parent, (line, character)).await?
     else {
         return Ok(None);
     };
@@ -51,7 +48,6 @@ pub async fn provide_definition(
 mod tests {
     use super::*;
     use crate::document::Language;
-    use std::collections::HashSet;
     use std::fs;
     use tempfile::tempdir;
     use tokio;
@@ -75,11 +71,11 @@ mod tests {
 
         let res = provide_definition(
             &doc,
-            &current_file,
+            &Option::Some(current_file.to_string_lossy().into_owned()),
             line,
             character + 1,
             &Config::default(),
-            &HashSet::new(),
+            &Vec::new(),
         )
         .await
         .unwrap();
@@ -121,11 +117,17 @@ mod tests {
 
         let res = provide_definition(
             &doc,
-            &current_file,
+            &Option::Some(
+                current_file
+                    .parent()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
             line,
             character + 1,
             &Config::default(),
-            &HashSet::new(),
+            &Vec::new(),
         )
         .await
         .unwrap();

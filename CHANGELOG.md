@@ -6,6 +6,9 @@ All notable changes to the Path Server will be documented in this file.
 ### Added
 - **VS Code**: Added remote window (e.g. Remote SSH, Dev Container) support.
 
+### Fixed
+- **Core**: Fixed error when open an untitled document.
+
 ## [0.5.2] 2026-03-14
 ### Fixed
 - **Core**: Fixed an issue where path in markdown quote and html block may not extract correctly.

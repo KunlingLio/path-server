@@ -1,6 +1,3 @@
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-
 use tower_lsp::lsp_types;
 
 use crate::Config;
@@ -11,14 +8,14 @@ use crate::resolver::resolve_at_pos;
 
 pub async fn provide_hover(
     doc: &Document,
-    doc_path: &Path,
+    parent: &Option<String>,
     line: usize,
     character: usize,
     config: &Config,
-    workspace_roots: &HashSet<PathBuf>,
+    workspace_roots: &[String],
 ) -> PathServerResult<Option<lsp_types::Hover>> {
     let Some(current_token) =
-        resolve_at_pos(doc, config, workspace_roots, doc_path, (line, character)).await?
+        resolve_at_pos(doc, config, workspace_roots, parent, (line, character)).await?
     else {
         return Ok(None);
     };
@@ -45,7 +42,6 @@ pub async fn provide_hover(
 mod tests {
     use super::*;
     use crate::document::Language;
-    use std::collections::HashSet;
     use std::fs;
     use tempfile::tempdir;
     use tokio;
@@ -68,11 +64,11 @@ mod tests {
 
         let res = provide_hover(
             &doc,
-            &current_file,
+            &Option::Some(current_file.to_string_lossy().into_owned()),
             line,
             character + 1,
             &Config::default(),
-            &HashSet::new(),
+            &Vec::new(),
         )
         .await
         .unwrap();
@@ -114,11 +110,17 @@ mod tests {
 
         let res = provide_hover(
             &doc,
-            &current_file,
+            &Option::Some(
+                current_file
+                    .parent()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
             line,
             character + 1,
             &Config::default(),
-            &HashSet::new(),
+            &Vec::new(),
         )
         .await
         .unwrap();

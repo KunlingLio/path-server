@@ -19,8 +19,8 @@ struct CompletionItemInner {
 
 pub async fn provide_completion(
     prefix: &str,
-    workspace_roots: &HashSet<PathBuf>,
-    current_file: &Path,
+    workspace_roots: &[String],
+    current_file_parent: &Option<String>,
     completion_config: &config::Config,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
@@ -47,16 +47,12 @@ pub async fn provide_completion(
         .await?
     } else if base_dir.is_relative() {
         // relative path
-        let workspace_folders = workspace_roots
-            .iter()
-            .map(|p| p.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        let parent = current_file
-            .parent()
-            .map(|p| p.to_string_lossy().into_owned());
         let home = std::env::var("HOME").ok();
-        let base_paths =
-            completion_config.base_paths(&workspace_folders, parent.as_ref(), home.as_ref());
+        let base_paths = completion_config.base_paths(
+            workspace_roots,
+            current_file_parent.as_ref(),
+            home.as_ref(),
+        );
 
         future::try_join_all(base_paths.iter().map(async |(base_path, schema, order)| {
             generate_completions(
@@ -246,11 +242,17 @@ mod tests {
         std::fs::File::create(root.join("data").join("a.txt")).unwrap();
         std::fs::File::create(root.join("data").join("b.log")).unwrap();
 
-        let mut roots = HashSet::new();
-        roots.insert(root.to_path_buf());
-        let current_file = root.join("src").join("main.rs");
-        std::fs::create_dir_all(current_file.parent().unwrap()).unwrap();
-        std::fs::File::create(&current_file).unwrap();
+        let mut roots = Vec::new();
+        roots.push(root.to_string_lossy().into_owned());
+        let current_file =
+            lsp_types::Url::from_file_path(root.join("src").join("main.rs")).unwrap();
+        let current_file_parent = Path::new(&current_file.to_file_path().unwrap())
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(current_file.to_file_path().unwrap().parent().unwrap()).unwrap();
+        std::fs::File::create(&current_file.to_file_path().unwrap()).unwrap();
 
         let config = crate::config::Config {
             base_path: vec!["${workspaceFolder}".into()],
@@ -266,9 +268,14 @@ mod tests {
             },
         };
 
-        let items = provide_completion("./data/a", &roots, &current_file, &config)
-            .await
-            .unwrap();
+        let items = provide_completion(
+            "./data/a",
+            &roots,
+            &Option::Some(current_file_parent),
+            &config,
+        )
+        .await
+        .unwrap();
 
         // only "a.txt": "b.log" is excluded and max_results = 1
         assert_eq!(items.len(), 1);

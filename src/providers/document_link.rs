@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use tower_lsp::lsp_types;
 
 use crate::client::get_client;
@@ -11,14 +9,14 @@ use crate::resolver;
 
 pub async fn provide_document_links(
     doc: &Document,
-    doc_path: &Path,
+    doc_parent: &Option<String>,
     config: &Config,
-    workspace_roots: &HashSet<PathBuf>,
+    workspace_roots: &[String],
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
     let client = get_client().await;
     assert!(client.support_document_link);
     assert!(config.highlight.enable); // these should be checked by server
-    let tokens = resolver::resolve_all(doc, config, workspace_roots, doc_path).await?;
+    let tokens = resolver::resolve_all(doc, config, workspace_roots, doc_parent).await?;
     let filtered = tokens
         .iter()
         .filter(|t| config.highlight.highlight_directory || !t.is_dir);
@@ -48,7 +46,6 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::document::Language;
-    use std::collections::HashSet;
     use std::fs;
     use tempfile::tempdir;
     use tokio;
@@ -66,10 +63,14 @@ mod tests {
         let text = format!("let s = \"{}\";\n", target.display());
         let doc = Document::new(text.clone(), &Language::rust.to_string()).unwrap();
 
-        let links =
-            provide_document_links(&doc, &current_file, &Config::default(), &HashSet::new())
-                .await
-                .unwrap();
+        let links = provide_document_links(
+            &doc,
+            &Option::Some(current_file.to_string_lossy().into_owned()),
+            &Config::default(),
+            &Vec::new(),
+        )
+        .await
+        .unwrap();
         assert_eq!(links.len(), 1);
         let url = links[0].target.as_ref().unwrap();
         assert_eq!(
@@ -96,10 +97,20 @@ mod tests {
         let text = format!("let s = \"{}\";\n", rel_path);
         let doc = Document::new(text.clone(), &Language::rust.to_string()).unwrap();
 
-        let links =
-            provide_document_links(&doc, &current_file, &Config::default(), &HashSet::new())
-                .await
-                .unwrap();
+        let links = provide_document_links(
+            &doc,
+            &Option::Some(
+                current_file
+                    .parent()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            &Config::default(),
+            &Vec::new(),
+        )
+        .await
+        .unwrap();
         assert_eq!(links.len(), 1);
         let url = links[0].target.as_ref().unwrap();
         let expected = tokio::fs::canonicalize(&target).await.unwrap();

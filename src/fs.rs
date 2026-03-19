@@ -32,16 +32,22 @@ pub async fn read_dir(path: impl AsRef<Path>) -> PathServerResult<Vec<fs::DirEnt
     Ok(files)
 }
 
-pub fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
-    if url.scheme() != "file" {
-        return Err(PathServerError::Unsupported(format!(
-            "Non-local url is not supported: {}",
-            url
-        )));
+pub fn url_to_path(url: &lsp_types::Url) -> PathServerResult<Option<PathBuf>> {
+    match url.scheme() {
+        "file" => url
+            .to_file_path()
+            .map_err(|_| {
+                PathServerError::InvalidPath(format!("Failed to convert URL to file path: {}", url))
+            })
+            .map(Some),
+        "untitled" => Ok(None),
+        _ => {
+            Err(PathServerError::Unsupported(format!(
+                "Non-local url is not supported: {}",
+                url
+            )))
+        }
     }
-    url.to_file_path().map_err(|_| {
-        PathServerError::InvalidPath(format!("Failed to convert URL to file path: {}", url))
-    })
 }
 
 pub fn is_hidden_file(path: &Path) -> PathServerResult<bool> {
@@ -88,7 +94,7 @@ mod tests {
         #[cfg(windows)]
         let url_str = "file:///C:/tmp";
         let url = lsp_types::Url::parse(url_str).unwrap();
-        let path = url_to_path(&url).unwrap();
+        let path = url_to_path(&url).unwrap().unwrap();
         assert!(path.ends_with("tmp"));
 
         // non-file scheme should error

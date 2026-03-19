@@ -1,6 +1,3 @@
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-
 use crate::Config;
 use crate::document::Document;
 use crate::error::*;
@@ -11,11 +8,11 @@ use super::resolve_all;
 pub async fn resolve_at_pos(
     document: &Document,
     config: &Config,
-    workspace_roots: &HashSet<PathBuf>,
-    doc_path: &Path,
+    workspace_roots: &[String],
+    parent: &Option<String>,
     cursor: (usize, usize),
 ) -> PathServerResult<Option<ResolvedPath>> {
-    let tokens = resolve_all(document, config, workspace_roots, doc_path).await?;
+    let tokens = resolve_all(document, config, workspace_roots, parent).await?;
 
     let current_token: Vec<&ResolvedPath> = tokens
         .iter()

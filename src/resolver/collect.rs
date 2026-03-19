@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use futures::future;
@@ -15,8 +14,8 @@ use super::{ResolvedPath, ResolvedPathCache};
 pub async fn resolve_all(
     document: &Document,
     config: &Config,
-    workspace_roots: &HashSet<PathBuf>,
-    doc_path: &Path,
+    workspace_roots: &[String],
+    doc_parent: &Option<String>,
 ) -> PathServerResult<Arc<Vec<ResolvedPath>>> {
     let mut cache = document.tokens.lock().await;
     let signature = config.signature()?;
@@ -27,7 +26,7 @@ pub async fn resolve_all(
         return Ok(tokens.clone());
     }
     // miss
-    let tokens = compute_tokens(document, config, workspace_roots, doc_path).await?;
+    let tokens = compute_tokens(document, config, workspace_roots, doc_parent).await?;
     let shared_tokens = Arc::new(tokens);
     *cache = ResolvedPathCache {
         tokens: Some(Arc::clone(&shared_tokens)),
@@ -39,14 +38,9 @@ pub async fn resolve_all(
 async fn compute_tokens(
     document: &Document,
     config: &Config,
-    workspace_roots: &HashSet<PathBuf>,
-    doc_path: &Path,
+    workspace_roots: &[String],
+    doc_parent: &Option<String>,
 ) -> PathServerResult<Vec<ResolvedPath>> {
-    let workspace_roots = workspace_roots
-        .iter()
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    let parent = doc_path.parent().map(|p| p.to_string_lossy().into_owned());
     let home = std::env::var("HOME").ok();
     let tokens: Vec<ResolvedPath> =
         future::try_join_all(parse_document(document).into_iter().flatten().map(
@@ -54,8 +48,8 @@ async fn compute_tokens(
                 filter_exist_path(
                     candidates,
                     config,
-                    &workspace_roots,
-                    parent.as_ref(),
+                    workspace_roots,
+                    doc_parent.as_ref(),
                     home.as_ref(),
                     document,
                 )
