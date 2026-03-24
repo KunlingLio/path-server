@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use config::{Config as ConfigLoader, File, FileFormat};
 use serde::{Deserialize, Serialize};
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 
 use crate::error::*;
 use crate::lsp_error;
@@ -152,9 +152,9 @@ impl Display for Config {
     }
 }
 
-pub async fn get(client: &tower_lsp::Client) -> Config {
+pub async fn get(client: &tower_lsp_server::Client) -> Config {
     let user_configs = client
-        .configuration(vec![lsp_types::ConfigurationItem {
+        .configuration(vec![ls_types::ConfigurationItem {
             scope_uri: None,
             section: Some("path-server".to_string()),
         }])

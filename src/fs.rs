@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 
 use crate::error::*;
 
@@ -32,21 +32,21 @@ pub async fn read_dir(path: impl AsRef<Path>) -> PathServerResult<Vec<fs::DirEnt
     Ok(files)
 }
 
-pub fn url_to_path(url: &lsp_types::Url) -> PathServerResult<Option<PathBuf>> {
-    match url.scheme() {
+pub fn url_to_path(url: &ls_types::Uri) -> PathServerResult<Option<PathBuf>> {
+    match url.scheme().as_str() {
         "file" => url
             .to_file_path()
-            .map_err(|_| {
-                PathServerError::InvalidPath(format!("Failed to convert URL to file path: {}", url))
-            })
+            .map(|path| path.into_owned())
+            .ok_or(PathServerError::InvalidPath(format!(
+                "Failed to convert URL to file path: {}",
+                url.as_str()
+            )))
             .map(Some),
         "untitled" => Ok(None),
-        _ => {
-            Err(PathServerError::Unsupported(format!(
-                "Non-local url is not supported: {}",
-                url
-            )))
-        }
+        _ => Err(PathServerError::Unsupported(format!(
+            "Non-local url is not supported: {}",
+            url.as_str()
+        ))),
     }
 }
 
@@ -73,17 +73,17 @@ pub fn is_hidden_file(path: &Path) -> PathServerResult<bool> {
     Ok(false)
 }
 
-pub fn path_to_url(path: &PathBuf) -> PathServerResult<lsp_types::Url> {
-    lsp_types::Url::from_file_path(path).map_err(|_| {
-        PathServerError::InvalidPath(format!(
-            "Failed to convert file path to URL: {}",
-            path.display()
-        ))
-    })
+pub fn path_to_url(path: &PathBuf) -> PathServerResult<ls_types::Uri> {
+    ls_types::Uri::from_file_path(path).ok_or(PathServerError::InvalidPath(format!(
+        "Failed to convert file path to URL: {}",
+        path.display()
+    )))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
@@ -93,12 +93,12 @@ mod tests {
         let url_str = "file:///tmp";
         #[cfg(windows)]
         let url_str = "file:///C:/tmp";
-        let url = lsp_types::Url::parse(url_str).unwrap();
+        let url = ls_types::Uri::from_str(url_str).unwrap();
         let path = url_to_path(&url).unwrap().unwrap();
         assert!(path.ends_with("tmp"));
 
         // non-file scheme should error
-        let url = lsp_types::Url::parse("http://example.com").unwrap();
+        let url = ls_types::Uri::from_str("http://example.com").unwrap();
         let err = url_to_path(&url).unwrap_err();
         match err {
             PathServerError::Unsupported(_) => {}

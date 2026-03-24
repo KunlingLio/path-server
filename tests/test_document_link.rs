@@ -1,6 +1,8 @@
 mod utils;
-use tower_lsp::LanguageServer;
-use tower_lsp::lsp_types::*;
+use std::str::FromStr;
+
+use tower_lsp_server::LanguageServer;
+use tower_lsp_server::ls_types::*;
 use utils::*;
 
 #[tokio::test]
@@ -43,13 +45,13 @@ async fn test_document_link_integration_untitled() {
     harness.create_file("data/linked.txt");
 
     let content = "let s = \"./data/linked.txt\";";
-    let uri = tower_lsp::lsp_types::Url::parse("untitled:untitled-1").unwrap();
+    let uri = tower_lsp_server::ls_types::Uri::from_str("untitled:untitled-1").unwrap();
 
     // emulate opening an untitled document
     harness
         .get_server()
-        .did_open(tower_lsp::lsp_types::DidOpenTextDocumentParams {
-            text_document: tower_lsp::lsp_types::TextDocumentItem {
+        .did_open(tower_lsp_server::ls_types::DidOpenTextDocumentParams {
+            text_document: tower_lsp_server::ls_types::TextDocumentItem {
                 uri: uri.clone(),
                 language_id: "".into(),
                 version: 1,
@@ -102,13 +104,13 @@ async fn test_document_link_with_base_path_untitled() {
 
     // Path relative to 'assets' folder
     let content = "let img = \"images/logo.png\";";
-    let uri = tower_lsp::lsp_types::Url::parse("untitled:untitled-2").unwrap();
+    let uri = tower_lsp_server::ls_types::Uri::from_str("untitled:untitled-2").unwrap();
 
     // open untitled document
     harness
         .get_server()
-        .did_open(tower_lsp::lsp_types::DidOpenTextDocumentParams {
-            text_document: tower_lsp::lsp_types::TextDocumentItem {
+        .did_open(tower_lsp_server::ls_types::DidOpenTextDocumentParams {
+            text_document: tower_lsp_server::ls_types::TextDocumentItem {
                 uri: uri.clone(),
                 language_id: "".into(),
                 version: 1,

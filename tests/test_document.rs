@@ -1,6 +1,6 @@
 mod utils;
-use tower_lsp::LanguageServer;
-use tower_lsp::lsp_types::*;
+use tower_lsp_server::LanguageServer;
+use tower_lsp_server::ls_types::*;
 use utils::*;
 
 #[tokio::test]

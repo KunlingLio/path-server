@@ -4,12 +4,12 @@ use path_server::Config;
 use path_server::PathServer;
 use std::fs::{self, File};
 use std::path::PathBuf;
-use tower_lsp::lsp_types::*;
-use tower_lsp::{LanguageServer, LspService};
+use tower_lsp_server::ls_types::*;
+use tower_lsp_server::{LanguageServer, LspService};
 
 pub struct TestHarness {
     _temp_dir: tempfile::TempDir,
-    root_uri: Url,
+    root_uri: Uri,
     root_path: PathBuf,
     service: Option<LspService<PathServer>>,
 }
@@ -19,7 +19,7 @@ impl TestHarness {
     pub async fn new() -> Self {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_path = temp_dir.path().to_path_buf();
-        let root_uri = Url::from_directory_path(&root_path).unwrap();
+        let root_uri = Uri::from_file_path(&root_path).unwrap();
 
         let (service, _) = LspService::new(|client| PathServer::new(client));
         let harness = Self {
@@ -31,7 +31,10 @@ impl TestHarness {
 
         // initialize language server
         let init_params = InitializeParams {
-            root_uri: Some(root_uri.clone()),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: root_uri.clone(),
+                name: "test".into(),
+            }]),
             capabilities: ClientCapabilities {
                 text_document: Some(TextDocumentClientCapabilities {
                     document_link: Some(DocumentLinkClientCapabilities {
@@ -52,7 +55,7 @@ impl TestHarness {
     pub async fn new_with_document_link(support: bool) -> Self {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_path = temp_dir.path().to_path_buf();
-        let root_uri = Url::from_directory_path(&root_path).unwrap();
+        let root_uri = Uri::from_file_path(&root_path).unwrap();
 
         let (service, _) = LspService::new(|client| PathServer::new(client));
         let harness = Self {
@@ -64,7 +67,10 @@ impl TestHarness {
 
         let init_params = if support {
             InitializeParams {
-                root_uri: Some(root_uri.clone()),
+                workspace_folders: Some(vec![WorkspaceFolder {
+                    uri: root_uri.clone(),
+                    name: "test".into(),
+                }]),
                 capabilities: ClientCapabilities {
                     text_document: Some(TextDocumentClientCapabilities {
                         document_link: Some(DocumentLinkClientCapabilities {
@@ -79,7 +85,10 @@ impl TestHarness {
             }
         } else {
             InitializeParams {
-                root_uri: Some(root_uri.clone()),
+                workspace_folders: Some(vec![WorkspaceFolder {
+                    uri: root_uri.clone(),
+                    name: "test".into(),
+                }]),
                 capabilities: ClientCapabilities::default(),
                 ..Default::default()
             }
@@ -112,25 +121,25 @@ impl TestHarness {
     }
 
     /// emulate open a file
-    pub async fn open_doc(&self, rel_path: &str, content: &str) -> Url {
-        let uri = self.root_uri.join(rel_path).unwrap();
+    pub async fn open_doc(&self, rel_path: &str, content: &str) -> Uri {
+        let uri = self.root_uri.to_file_path().unwrap().join(rel_path);
         self.get_server()
             .did_open(DidOpenTextDocumentParams {
                 text_document: TextDocumentItem {
-                    uri: uri.clone(),
+                    uri: Uri::from_file_path(&uri).unwrap(),
                     language_id: "".into(),
                     version: 1,
                     text: content.into(),
                 },
             })
             .await;
-        uri
+        Uri::from_file_path(&uri).unwrap()
     }
 
     /// get completion items
     pub async fn completion_items(
         &self,
-        uri: &Url,
+        uri: &Uri,
         line: u32,
         character: u32,
     ) -> Vec<CompletionItem> {
@@ -156,7 +165,7 @@ impl TestHarness {
     /// test completion
     pub async fn assert_completion_contains(
         &self,
-        uri: &Url,
+        uri: &Uri,
         line: u32,
         character: u32,
         expected_label: &str,
@@ -192,7 +201,7 @@ impl TestHarness {
     }
 
     /// get document links
-    pub async fn document_links(&self, uri: &Url) -> Vec<DocumentLink> {
+    pub async fn document_links(&self, uri: &Uri) -> Vec<DocumentLink> {
         let params = DocumentLinkParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
             work_done_progress_params: Default::default(),

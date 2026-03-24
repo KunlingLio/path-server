@@ -8,6 +8,10 @@ All notable changes to the Path Server will be documented in this file.
 
 ### Fixed
 - **Core**: Fixed error when open an untitled document.
+- **Core**: Fixed occasional crashes with error "receiver already dropped" when initializing the server.
+
+### Improved
+- **Core**: Replaced the long-unmaintained `tower-lsp` dependency with a maintained fork `tower-lsp-server`.
 
 ## [0.5.2] 2026-03-14
 ### Fixed

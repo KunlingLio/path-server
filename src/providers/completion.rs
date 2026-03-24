@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use futures::future;
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 
 use crate::config;
 use crate::error::*;
@@ -13,7 +13,7 @@ use crate::{lsp_debug, lsp_warn};
 
 /// The wrapper struct inside this module to store additional information.
 struct CompletionItemInner {
-    completion: lsp_types::CompletionItem,
+    completion: ls_types::CompletionItem,
     full_path: PathBuf,
 }
 
@@ -22,7 +22,7 @@ pub async fn provide_completion(
     workspace_roots: &[String],
     current_file_parent: &Option<String>,
     completion_config: &config::Config,
-) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
+) -> PathServerResult<Vec<ls_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
     lsp_debug!(
         "Detected base_dir: '{}', partial_name: '{}'",
@@ -100,7 +100,7 @@ async fn filter(
     completions: Vec<CompletionItemInner>,
     max_completions: usize,
     exclude_patterns: &[String],
-) -> Vec<lsp_types::CompletionItem> {
+) -> Vec<ls_types::CompletionItem> {
     let mut builder = GlobSetBuilder::new();
     for pattern in exclude_patterns {
         let Ok(glob) = Glob::new(pattern) else {
@@ -172,16 +172,16 @@ async fn generate_completions(
             }
             if fs::is_dir(&file.path()).await {
                 let completion = CompletionItemInner {
-                    completion: lsp_types::CompletionItem {
+                    completion: ls_types::CompletionItem {
                         label: filename.clone(),
-                        kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                        kind: Some(ls_types::CompletionItemKind::FOLDER),
                         insert_text: if trigger_next {
                             Some(filename.clone() + "/")
                         } else {
                             Some(filename.clone())
                         },
                         command: if trigger_next {
-                            Some(lsp_types::Command {
+                            Some(ls_types::Command {
                                 title: "triggerSuggest".to_string(),
                                 command: "editor.action.triggerSuggest".to_string(),
                                 arguments: None,
@@ -191,7 +191,7 @@ async fn generate_completions(
                         },
                         sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
                         filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
-                        label_details: Some(lsp_types::CompletionItemLabelDetails {
+                        label_details: Some(ls_types::CompletionItemLabelDetails {
                             description: Some(format!("from {}", root_schema)),
                             ..Default::default()
                         }),
@@ -202,13 +202,13 @@ async fn generate_completions(
                 Ok(Some(completion))
             } else {
                 let completion = CompletionItemInner {
-                    completion: lsp_types::CompletionItem {
+                    completion: ls_types::CompletionItem {
                         label: filename.clone(),
-                        kind: Some(lsp_types::CompletionItemKind::FILE),
+                        kind: Some(ls_types::CompletionItemKind::FILE),
                         insert_text: Some(filename.clone()),
                         sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
                         filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
-                        label_details: Some(lsp_types::CompletionItemLabelDetails {
+                        label_details: Some(ls_types::CompletionItemLabelDetails {
                             description: Some(format!("from {}", root_schema)),
                             ..Default::default()
                         }),
@@ -244,9 +244,8 @@ mod tests {
 
         let mut roots = Vec::new();
         roots.push(root.to_string_lossy().into_owned());
-        let current_file =
-            lsp_types::Url::from_file_path(root.join("src").join("main.rs")).unwrap();
-        let current_file_parent = Path::new(&current_file.to_file_path().unwrap())
+        let current_file = ls_types::Uri::from_file_path(root.join("src").join("main.rs")).unwrap();
+        let current_file_parent = Path::new(current_file.to_file_path().unwrap().as_ref())
             .parent()
             .unwrap()
             .to_string_lossy()
@@ -287,21 +286,21 @@ mod tests {
         // test filter duplicate and exclude
         let items = vec![
             CompletionItemInner {
-                completion: lsp_types::CompletionItem {
+                completion: ls_types::CompletionItem {
                     label: "keep.txt".into(),
                     ..Default::default()
                 },
                 full_path: std::path::PathBuf::from("/some/path/to/keep.txt"),
             },
             CompletionItemInner {
-                completion: lsp_types::CompletionItem {
+                completion: ls_types::CompletionItem {
                     label: "ignore.log".into(),
                     ..Default::default()
                 },
                 full_path: std::path::PathBuf::from("/some/path/to/ignore.log"),
             },
             CompletionItemInner {
-                completion: lsp_types::CompletionItem {
+                completion: ls_types::CompletionItem {
                     label: "keep.txt".into(),
                     ..Default::default()
                 },
@@ -315,15 +314,15 @@ mod tests {
 
         // test cap at max results
         let items = vec![
-            lsp_types::CompletionItem {
+            ls_types::CompletionItem {
                 label: "1.txt".into(),
                 ..Default::default()
             },
-            lsp_types::CompletionItem {
+            ls_types::CompletionItem {
                 label: "2.log".into(),
                 ..Default::default()
             },
-            lsp_types::CompletionItem {
+            ls_types::CompletionItem {
                 label: "3.txt".into(),
                 ..Default::default()
             }, // duplicate

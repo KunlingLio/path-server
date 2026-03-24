@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
-use tower_lsp::jsonrpc;
-use tower_lsp::lsp_types;
+use tower_lsp_server::jsonrpc;
+use tower_lsp_server::ls_types;
 
 use crate::client::{ClientMetadata, Editor, get_client, set_client};
 use crate::config;
@@ -20,15 +20,15 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 pub struct PathServer {
-    client: tower_lsp::Client,
-    workspace_roots: RwLock<HashSet<lsp_types::Url>>,
+    client: tower_lsp_server::Client,
+    workspace_roots: RwLock<HashSet<ls_types::Uri>>,
     /// file path -> document
-    documents: RwLock<HashMap<lsp_types::Url, Document>>,
+    documents: RwLock<HashMap<ls_types::Uri, Document>>,
     config_cache: RwLock<Option<Arc<config::Config>>>,
 }
 
 impl PathServer {
-    pub fn new(client: tower_lsp::Client) -> Self {
+    pub fn new(client: tower_lsp_server::Client) -> Self {
         logger::init(&client);
         Self {
             client,
@@ -53,7 +53,7 @@ impl PathServer {
         *guard = Some(Arc::new(cfg));
     }
 
-    pub fn parse_editor_env(&self, params: &lsp_types::InitializeParams) -> Editor {
+    pub fn parse_editor_env(&self, params: &ls_types::InitializeParams) -> Editor {
         let Some(options) = &params.initialization_options else {
             return Editor::Unknown("unknown".into());
         };
@@ -66,7 +66,7 @@ impl PathServer {
         Editor::Unknown("unknown".into())
     }
 
-    pub fn parse_client_env(&self, params: &lsp_types::InitializeParams) -> ClientMetadata {
+    pub fn parse_client_env(&self, params: &ls_types::InitializeParams) -> ClientMetadata {
         let editor = self.parse_editor_env(params);
         let support_document_link = params
             .capabilities
@@ -89,7 +89,7 @@ impl PathServer {
             .collect::<Vec<_>>()
     }
 
-    pub fn doc_parent(doc_url: &lsp_types::Url) -> Option<String> {
+    pub fn doc_parent(doc_url: &ls_types::Uri) -> Option<String> {
         fs::url_to_path(doc_url)
             .ok()
             .flatten()
@@ -97,18 +97,19 @@ impl PathServer {
     }
 }
 
-#[tower_lsp::async_trait]
-impl tower_lsp::LanguageServer for PathServer {
+impl tower_lsp_server::LanguageServer for PathServer {
     async fn initialize(
         &self,
-        params: lsp_types::InitializeParams,
-    ) -> jsonrpc::Result<lsp_types::InitializeResult> {
+        params: ls_types::InitializeParams,
+    ) -> jsonrpc::Result<ls_types::InitializeResult> {
         lsp_info!("Initializing Path Server").await;
         // set editor env
         let client_env = self.parse_client_env(&params);
         lsp_info!("Client Env: {}", client_env).await;
         set_client(client_env).await;
+        // get workspace roots
         // for backward compatibility
+        #[allow(deprecated)]
         if let Some(uri) = params.root_uri {
             let mut roots = self.workspace_roots.write().await;
             roots.insert(uri);
@@ -116,14 +117,14 @@ impl tower_lsp::LanguageServer for PathServer {
         if let Some(folders) = params.workspace_folders {
             let mut roots = self.workspace_roots.write().await;
             for folder in folders {
-                lsp_info!("Adding workspace root: {}", folder.uri).await;
+                lsp_info!("Adding workspace root: {}", folder.uri.as_str()).await;
                 roots.insert(folder.uri);
             }
         }
-        Ok(lsp_types::InitializeResult {
-            capabilities: lsp_types::ServerCapabilities {
+        Ok(ls_types::InitializeResult {
+            capabilities: ls_types::ServerCapabilities {
                 // for path completion
-                completion_provider: Some(lsp_types::CompletionOptions {
+                completion_provider: Some(ls_types::CompletionOptions {
                     trigger_characters: Some(vec![
                         ".".to_string(),
                         "/".to_string(),
@@ -134,22 +135,22 @@ impl tower_lsp::LanguageServer for PathServer {
                     ..Default::default()
                 }),
                 // for path highlighting
-                document_link_provider: Some(lsp_types::DocumentLinkOptions {
+                document_link_provider: Some(ls_types::DocumentLinkOptions {
                     resolve_provider: Some(false),
                     work_done_progress_options: Default::default(),
                 }),
                 // for path jumping
-                definition_provider: Some(lsp_types::OneOf::Left(true)),
+                definition_provider: Some(ls_types::OneOf::Left(true)),
                 // for hover hint
-                hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
+                hover_provider: Some(ls_types::HoverProviderCapability::Simple(true)),
                 // detectors
-                text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(
-                    lsp_types::TextDocumentSyncKind::INCREMENTAL,
+                text_document_sync: Some(ls_types::TextDocumentSyncCapability::Kind(
+                    ls_types::TextDocumentSyncKind::INCREMENTAL,
                 )),
-                workspace: Some(lsp_types::WorkspaceServerCapabilities {
-                    workspace_folders: Some(lsp_types::WorkspaceFoldersServerCapabilities {
+                workspace: Some(ls_types::WorkspaceServerCapabilities {
+                    workspace_folders: Some(ls_types::WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
-                        change_notifications: Some(lsp_types::OneOf::Left(true)),
+                        change_notifications: Some(ls_types::OneOf::Left(true)),
                     }),
                     ..Default::default()
                 }),
@@ -159,7 +160,7 @@ impl tower_lsp::LanguageServer for PathServer {
         })
     }
 
-    async fn initialized(&self, _: lsp_types::InitializedParams) {
+    async fn initialized(&self, _: ls_types::InitializedParams) {
         lsp_info!("Path Server initialized").await;
         lsp_info!("Path Server version: {}", VERSION).await;
         if cfg!(debug_assertions) {
@@ -174,7 +175,7 @@ impl tower_lsp::LanguageServer for PathServer {
         Ok(())
     }
 
-    async fn did_change_configuration(&self, _: lsp_types::DidChangeConfigurationParams) {
+    async fn did_change_configuration(&self, _: ls_types::DidChangeConfigurationParams) {
         let cfg = Arc::new(config::get(&self.client).await);
         *self.config_cache.write().await = Some(cfg);
         lsp_info!(
@@ -186,24 +187,24 @@ impl tower_lsp::LanguageServer for PathServer {
 
     async fn did_change_workspace_folders(
         &self,
-        params: lsp_types::DidChangeWorkspaceFoldersParams,
+        params: ls_types::DidChangeWorkspaceFoldersParams,
     ) {
         for folder in params.event.added {
-            lsp_info!("Adding workspace folder: {}", folder.uri).await;
+            lsp_info!("Adding workspace folder: {}", folder.uri.as_str()).await;
             let mut roots = self.workspace_roots.write().await;
             roots.insert(folder.uri);
         }
         for folder in params.event.removed {
-            lsp_info!("Removing workspace folder: {}", folder.uri).await;
+            lsp_info!("Removing workspace folder: {}", folder.uri.as_str()).await;
             let mut roots = self.workspace_roots.write().await;
             roots.remove(&folder.uri);
         }
     }
 
-    async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
+    async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) {
         lsp_info!(
             "Opening document: {}, language: {}",
-            params.text_document.uri,
+            params.text_document.uri.as_str(),
             params.text_document.language_id
         )
         .await;
@@ -212,7 +213,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let Ok(doc) = doc_res else {
             lsp_error!(
                 "Failed to create document for: {}, error: {}",
-                params.text_document.uri,
+                params.text_document.uri.as_str(),
                 doc_res.unwrap_err()
             )
             .await;
@@ -221,10 +222,10 @@ impl tower_lsp::LanguageServer for PathServer {
         documents.insert(params.text_document.uri, doc);
     }
 
-    async fn did_change(&self, params: lsp_types::DidChangeTextDocumentParams) {
+    async fn did_change(&self, params: ls_types::DidChangeTextDocumentParams) {
         lsp_info!(
             "[Document Sync] Changing document: {}",
-            params.text_document.uri
+            params.text_document.uri.as_str()
         )
         .await;
         let mut docs = self.documents.write().await;
@@ -237,7 +238,7 @@ impl tower_lsp::LanguageServer for PathServer {
             if let Err(e) = result {
                 lsp_error!(
                     "Failed to apply change to document {}: {}",
-                    params.text_document.uri,
+                    params.text_document.uri.as_str(),
                     e
                 )
                 .await;
@@ -246,10 +247,10 @@ impl tower_lsp::LanguageServer for PathServer {
         }
     }
 
-    async fn did_close(&self, params: lsp_types::DidCloseTextDocumentParams) {
+    async fn did_close(&self, params: ls_types::DidCloseTextDocumentParams) {
         lsp_info!(
             "[Document Sync] Closing document: {}",
-            params.text_document.uri
+            params.text_document.uri.as_str()
         )
         .await;
         self.documents
@@ -260,8 +261,8 @@ impl tower_lsp::LanguageServer for PathServer {
 
     async fn completion(
         &self,
-        params: lsp_types::CompletionParams,
-    ) -> jsonrpc::Result<Option<lsp_types::CompletionResponse>> {
+        params: ls_types::CompletionParams,
+    ) -> jsonrpc::Result<Option<ls_types::CompletionResponse>> {
         // get the line prefix
         let line_number = params.text_document_position.position.line as usize;
         let character = params.text_document_position.position.character as usize;
@@ -270,7 +271,7 @@ impl tower_lsp::LanguageServer for PathServer {
             .get(&params.text_document_position.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
                 "Document {} not found, please open it before completion",
-                params.text_document_position.text_document.uri
+                params.text_document_position.text_document.uri.as_str()
             )))?;
         let line_prefix = doc.get_line(line_number, Some(character))?;
 
@@ -293,13 +294,13 @@ impl tower_lsp::LanguageServer for PathServer {
                 .collect::<Vec<_>>()
         )
         .await;
-        return Ok(Some(lsp_types::CompletionResponse::Array(completions)));
+        Ok(Some(ls_types::CompletionResponse::Array(completions)))
     }
 
     async fn document_link(
         &self,
-        params: lsp_types::DocumentLinkParams,
-    ) -> jsonrpc::Result<Option<Vec<lsp_types::DocumentLink>>> {
+        params: ls_types::DocumentLinkParams,
+    ) -> jsonrpc::Result<Option<Vec<ls_types::DocumentLink>>> {
         let config = self.get_config().await;
         let client = get_client().await;
         if !client.support_document_link {
@@ -312,7 +313,7 @@ impl tower_lsp::LanguageServer for PathServer {
         }
         lsp_info!(
             "[Document Link] Processing document link request for: {}",
-            params.text_document.uri
+            params.text_document.uri.as_str()
         )
         .await;
         let documents = self.documents.read().await;
@@ -320,7 +321,7 @@ impl tower_lsp::LanguageServer for PathServer {
             .get(&params.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
                 "Document {} not found, please open it before providing document links",
-                params.text_document.uri
+                params.text_document.uri.as_str()
             )))?;
 
         let workspace_roots = self.workspace_paths().await;
@@ -341,11 +342,15 @@ impl tower_lsp::LanguageServer for PathServer {
 
     async fn goto_definition(
         &self,
-        params: lsp_types::GotoDefinitionParams,
-    ) -> jsonrpc::Result<Option<lsp_types::GotoDefinitionResponse>> {
+        params: ls_types::GotoDefinitionParams,
+    ) -> jsonrpc::Result<Option<ls_types::GotoDefinitionResponse>> {
         lsp_info!(
             "[Goto Definition] Processing goto definition request for: {} {}:{}",
-            params.text_document_position_params.text_document.uri,
+            params
+                .text_document_position_params
+                .text_document
+                .uri
+                .as_str(),
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character
         )
@@ -359,7 +364,11 @@ impl tower_lsp::LanguageServer for PathServer {
             .get(&params.text_document_position_params.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
                 "Document {} not found, please open it before providing goto definition",
-                params.text_document_position_params.text_document.uri
+                params
+                    .text_document_position_params
+                    .text_document
+                    .uri
+                    .as_str()
             )))?;
         let config = self.get_config().await;
         let workspace_roots = self.workspace_paths().await;
@@ -368,12 +377,12 @@ impl tower_lsp::LanguageServer for PathServer {
             providers::provide_definition(doc, &parent, line, character, &config, &workspace_roots)
                 .await?;
         if let Some(definition) = &definition {
-            let lsp_types::GotoDefinitionResponse::Link(definition) = &definition else {
+            let ls_types::GotoDefinitionResponse::Link(definition) = &definition else {
                 unreachable!("Definition is not a link");
             };
             lsp_info!(
                 "[Goto Definition] Generated definition to: {}",
-                definition[0].target_uri
+                definition[0].target_uri.as_str()
             )
             .await;
             lsp_debug!("[Goto Definition] Definition details: {:?}", definition).await;
@@ -385,11 +394,15 @@ impl tower_lsp::LanguageServer for PathServer {
 
     async fn hover(
         &self,
-        params: lsp_types::HoverParams,
-    ) -> jsonrpc::Result<Option<lsp_types::Hover>> {
+        params: ls_types::HoverParams,
+    ) -> jsonrpc::Result<Option<ls_types::Hover>> {
         lsp_info!(
             "[Hover] Processing hover request for: {} {}:{}",
-            params.text_document_position_params.text_document.uri,
+            params
+                .text_document_position_params
+                .text_document
+                .uri
+                .as_str(),
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character
         )
@@ -408,7 +421,11 @@ impl tower_lsp::LanguageServer for PathServer {
             .get(&params.text_document_position_params.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
                 "Document {} not found, please open it before hover information",
-                params.text_document_position_params.text_document.uri
+                params
+                    .text_document_position_params
+                    .text_document
+                    .uri
+                    .as_str()
             )))?;
         let workspace_roots = self.workspace_paths().await;
 

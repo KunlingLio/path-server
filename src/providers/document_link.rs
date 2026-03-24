@@ -1,4 +1,4 @@
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 
 use crate::client::get_client;
 use crate::config::Config;
@@ -12,7 +12,7 @@ pub async fn provide_document_links(
     doc_parent: &Option<String>,
     config: &Config,
     workspace_roots: &[String],
-) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
+) -> PathServerResult<Vec<ls_types::DocumentLink>> {
     let client = get_client().await;
     assert!(client.support_document_link);
     assert!(config.highlight.enable); // these should be checked by server
@@ -23,12 +23,12 @@ pub async fn provide_document_links(
 
     let links = filtered
         .map(|token| {
-            let range = lsp_types::Range::new(
-                lsp_types::Position::new(token.start.0 as u32, token.start.1 as u32),
-                lsp_types::Position::new(token.end.0 as u32, token.end.1 as u32),
+            let range = ls_types::Range::new(
+                ls_types::Position::new(token.start.0 as u32, token.start.1 as u32),
+                ls_types::Position::new(token.end.0 as u32, token.end.1 as u32),
             );
 
-            let link = lsp_types::DocumentLink {
+            let link = ls_types::DocumentLink {
                 range,
                 target: Some(fs::path_to_url(&token.target)?),
                 tooltip: Some(format!("Open file: {}", token.target.display())),
@@ -36,7 +36,7 @@ pub async fn provide_document_links(
             };
             PathServerResult::Ok(link)
         })
-        .collect::<PathServerResult<Vec<lsp_types::DocumentLink>>>()?;
+        .collect::<PathServerResult<Vec<ls_types::DocumentLink>>>()?;
 
     Ok(links)
 }
