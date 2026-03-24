@@ -38,14 +38,14 @@ pub fn url_to_path(url: &ls_types::Uri) -> PathServerResult<Option<PathBuf>> {
             .to_file_path()
             .map(|path| path.into_owned())
             .ok_or(PathServerError::InvalidPath(format!(
-                "Failed to convert URL to file path: {:?}",
-                url
+                "Failed to convert URL to file path: {}",
+                url.as_str()
             )))
             .map(Some),
         "untitled" => Ok(None),
         _ => Err(PathServerError::Unsupported(format!(
-            "Non-local url is not supported: {:?}",
-            url
+            "Non-local url is not supported: {}",
+            url.as_str()
         ))),
     }
 }

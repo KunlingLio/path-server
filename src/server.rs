@@ -107,15 +107,10 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let client_env = self.parse_client_env(&params);
         lsp_info!("Client Env: {}", client_env).await;
         set_client(client_env).await;
-        // for backward compatibility
-        // if let Some(uri) = params.root_uri {
-        //     let mut roots = self.workspace_roots.write().await;
-        //     roots.insert(uri);
-        // }
         if let Some(folders) = params.workspace_folders {
             let mut roots = self.workspace_roots.write().await;
             for folder in folders {
-                lsp_info!("Adding workspace root: {:?}", folder.uri).await;
+                lsp_info!("Adding workspace root: {}", folder.uri.as_str()).await;
                 roots.insert(folder.uri);
             }
         }
@@ -188,12 +183,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
         params: ls_types::DidChangeWorkspaceFoldersParams,
     ) {
         for folder in params.event.added {
-            lsp_info!("Adding workspace folder: {:?}", folder.uri).await;
+            lsp_info!("Adding workspace folder: {}", folder.uri.as_str()).await;
             let mut roots = self.workspace_roots.write().await;
             roots.insert(folder.uri);
         }
         for folder in params.event.removed {
-            lsp_info!("Removing workspace folder: {:?}", folder.uri).await;
+            lsp_info!("Removing workspace folder: {}", folder.uri.as_str()).await;
             let mut roots = self.workspace_roots.write().await;
             roots.remove(&folder.uri);
         }
@@ -201,8 +196,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
 
     async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) {
         lsp_info!(
-            "Opening document: {:?}, language: {}",
-            params.text_document.uri,
+            "Opening document: {}, language: {}",
+            params.text_document.uri.as_str(),
             params.text_document.language_id
         )
         .await;
@@ -210,8 +205,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let doc_res = Document::new(params.text_document.text, &params.text_document.language_id);
         let Ok(doc) = doc_res else {
             lsp_error!(
-                "Failed to create document for: {:?}, error: {}",
-                params.text_document.uri,
+                "Failed to create document for: {}, error: {}",
+                params.text_document.uri.as_str(),
                 doc_res.unwrap_err()
             )
             .await;
@@ -222,8 +217,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
 
     async fn did_change(&self, params: ls_types::DidChangeTextDocumentParams) {
         lsp_info!(
-            "[Document Sync] Changing document: {:?}",
-            params.text_document.uri
+            "[Document Sync] Changing document: {}",
+            params.text_document.uri.as_str()
         )
         .await;
         let mut docs = self.documents.write().await;
@@ -235,8 +230,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
             let result = doc.apply_change(change);
             if let Err(e) = result {
                 lsp_error!(
-                    "Failed to apply change to document {:?}: {}",
-                    params.text_document.uri,
+                    "Failed to apply change to document {}: {}",
+                    params.text_document.uri.as_str(),
                     e
                 )
                 .await;
@@ -247,8 +242,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
 
     async fn did_close(&self, params: ls_types::DidCloseTextDocumentParams) {
         lsp_info!(
-            "[Document Sync] Closing document: {:?}",
-            params.text_document.uri
+            "[Document Sync] Closing document: {}",
+            params.text_document.uri.as_str()
         )
         .await;
         self.documents
@@ -268,8 +263,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let doc = documents
             .get(&params.text_document_position.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
-                "Document {:?} not found, please open it before completion",
-                params.text_document_position.text_document.uri
+                "Document {} not found, please open it before completion",
+                params.text_document_position.text_document.uri.as_str()
             )))?;
         let line_prefix = doc.get_line(line_number, Some(character))?;
 
@@ -310,16 +305,16 @@ impl tower_lsp_server::LanguageServer for PathServer {
             return Ok(None);
         }
         lsp_info!(
-            "[Document Link] Processing document link request for: {:?}",
-            params.text_document.uri
+            "[Document Link] Processing document link request for: {}",
+            params.text_document.uri.as_str()
         )
         .await;
         let documents = self.documents.read().await;
         let doc = documents
             .get(&params.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
-                "Document {:?} not found, please open it before providing document links",
-                params.text_document.uri
+                "Document {} not found, please open it before providing document links",
+                params.text_document.uri.as_str()
             )))?;
 
         let workspace_roots = self.workspace_paths().await;
@@ -343,8 +338,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
         params: ls_types::GotoDefinitionParams,
     ) -> jsonrpc::Result<Option<ls_types::GotoDefinitionResponse>> {
         lsp_info!(
-            "[Goto Definition] Processing goto definition request for: {:?} {}:{}",
-            params.text_document_position_params.text_document.uri,
+            "[Goto Definition] Processing goto definition request for: {} {}:{}",
+            params
+                .text_document_position_params
+                .text_document
+                .uri
+                .as_str(),
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character
         )
@@ -357,8 +356,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let doc = documents
             .get(&params.text_document_position_params.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
-                "Document {:?} not found, please open it before providing goto definition",
-                params.text_document_position_params.text_document.uri
+                "Document {} not found, please open it before providing goto definition",
+                params
+                    .text_document_position_params
+                    .text_document
+                    .uri
+                    .as_str()
             )))?;
         let config = self.get_config().await;
         let workspace_roots = self.workspace_paths().await;
@@ -371,8 +374,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
                 unreachable!("Definition is not a link");
             };
             lsp_info!(
-                "[Goto Definition] Generated definition to: {:?}",
-                definition[0].target_uri
+                "[Goto Definition] Generated definition to: {}",
+                definition[0].target_uri.as_str()
             )
             .await;
             lsp_debug!("[Goto Definition] Definition details: {:?}", definition).await;
@@ -387,8 +390,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
         params: ls_types::HoverParams,
     ) -> jsonrpc::Result<Option<ls_types::Hover>> {
         lsp_info!(
-            "[Hover] Processing hover request for: {:?} {}:{}",
-            params.text_document_position_params.text_document.uri,
+            "[Hover] Processing hover request for: {} {}:{}",
+            params
+                .text_document_position_params
+                .text_document
+                .uri
+                .as_str(),
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character
         )
@@ -406,8 +413,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let doc = documents
             .get(&params.text_document_position_params.text_document.uri)
             .ok_or(PathServerError::Unknown(format!(
-                "Document {:?} not found, please open it before hover information",
-                params.text_document_position_params.text_document.uri
+                "Document {} not found, please open it before hover information",
+                params
+                    .text_document_position_params
+                    .text_document
+                    .uri
+                    .as_str()
             )))?;
         let workspace_roots = self.workspace_paths().await;
 
