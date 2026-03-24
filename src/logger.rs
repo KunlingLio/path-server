@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 use std::sync::OnceLock;
 
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 
-static LSP_CLIENT: OnceLock<tower_lsp::Client> = OnceLock::new();
+static LSP_CLIENT: OnceLock<tower_lsp_server::Client> = OnceLock::new();
 
-pub fn init(client: &tower_lsp::Client) {
+pub fn init(client: &tower_lsp_server::Client) {
     let _ = LSP_CLIENT.set(client.clone()); // ignore multi init error
 }
 
@@ -74,7 +74,7 @@ pub async fn __debug(message: String) {
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::LOG, format!("[DEBUG] {}", message))
+            .log_message(ls_types::MessageType::LOG, format!("[DEBUG] {}", message))
             .await;
     } else {
         panic!("Failed to log debug message: lopper is not initialized!")
@@ -89,7 +89,7 @@ pub async fn __info(message: String) {
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::INFO, message)
+            .log_message(ls_types::MessageType::INFO, message)
             .await;
     } else {
         panic!("Failed to log: lopper is not initialized!")
@@ -104,7 +104,7 @@ pub async fn __warn(message: String) {
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::WARNING, message)
+            .log_message(ls_types::MessageType::WARNING, message)
             .await;
     } else {
         panic!("Failed to log: lopper is not initialized!")
@@ -119,7 +119,7 @@ pub async fn __error(message: String) {
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::ERROR, message)
+            .log_message(ls_types::MessageType::ERROR, message)
             .await;
     } else {
         panic!("Failed to log: lopper is not initialized!")

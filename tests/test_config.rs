@@ -2,7 +2,7 @@ mod utils;
 use path_server::{Completion, Config, Highlight};
 use utils::*;
 
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 
 /// test config.completion.maxResults
 #[tokio::test]
@@ -184,7 +184,7 @@ async fn test_config_trigger_next_completion() {
     assert_eq!(items[0].insert_text.clone().unwrap(), "dir/");
     assert_eq!(
         items[0].command,
-        Some(lsp_types::Command {
+        Some(ls_types::Command {
             title: "triggerSuggest".to_string(),
             command: "editor.action.triggerSuggest".to_string(),
             arguments: None,

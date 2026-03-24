@@ -1,6 +1,6 @@
 mod utils;
-use tower_lsp::LanguageServer;
-use tower_lsp::lsp_types::*;
+use tower_lsp_server::LanguageServer;
+use tower_lsp_server::ls_types::*;
 use utils::*;
 
 #[tokio::test]
@@ -10,7 +10,7 @@ async fn test_workspace_folder_added() {
     // Create an external folder for workspace
     let temp_folder = tempfile::tempdir().unwrap();
     let folder_path = temp_folder.path().to_path_buf();
-    let folder_uri = Url::from_directory_path(&folder_path).unwrap();
+    let folder_uri = Uri::from_file_path(&folder_path).unwrap();
 
     // Create a file in this new folder
     let data_file = folder_path.join("external_data/config.json");
@@ -48,7 +48,7 @@ async fn test_workspace_folder_removed() {
     // Add external folder
     let temp_folder = tempfile::tempdir().unwrap();
     let folder_path = temp_folder.path().to_path_buf();
-    let folder_uri = Url::from_directory_path(&folder_path).unwrap();
+    let folder_uri = Uri::from_file_path(&folder_path).unwrap();
     let data_file = folder_path.join("removed_data/config.json");
     std::fs::create_dir_all(data_file.parent().unwrap()).unwrap();
     std::fs::File::create(data_file).unwrap();

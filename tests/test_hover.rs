@@ -1,6 +1,8 @@
 mod utils;
-use tower_lsp::LanguageServer;
-use tower_lsp::lsp_types::*;
+use std::str::FromStr;
+
+use tower_lsp_server::LanguageServer;
+use tower_lsp_server::ls_types::*;
 use utils::*;
 
 #[tokio::test]
@@ -41,7 +43,7 @@ async fn test_hover_relative_integration() {
 
     match hover.contents {
         HoverContents::Scalar(MarkedString::String(s)) => {
-            let url = Url::parse(&s).unwrap();
+            let url = Uri::from_str(&s).unwrap();
             let expected = tokio::fs::canonicalize(harness.root_path().join("data/rel.txt"))
                 .await
                 .unwrap();
@@ -95,7 +97,7 @@ async fn test_hover_absolute_integration() {
 
     match hover.contents {
         HoverContents::Scalar(MarkedString::String(s)) => {
-            let url = Url::parse(&s).unwrap();
+            let url = Uri::from_str(&s).unwrap();
             let expected = tokio::fs::canonicalize(abs_path).await.unwrap();
             assert_eq!(
                 tokio::fs::canonicalize(&url.to_file_path().unwrap())

@@ -30,7 +30,7 @@ strum = "0.28.0"
 strum_macros = "0.28.0"
 thiserror = "2.0.18"
 tokio = { version = "1.50.0", features = ["full"] }
-tower-lsp = "0.20.0"
+tower-lsp-server = "0.23.0"
 tree-sitter = "0.26.7"
 tree-sitter-c = "0.24.1"
 tree-sitter-cpp = "0.23.4"

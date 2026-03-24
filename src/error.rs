@@ -1,6 +1,6 @@
 use serde_json::Value;
 use thiserror::Error;
-use tower_lsp::jsonrpc;
+use tower_lsp_server::jsonrpc;
 
 pub type PathServerResult<T> = Result<T, PathServerError>;
 
@@ -29,7 +29,7 @@ pub enum PathServerError {
     Unknown(String),
 }
 
-impl From<PathServerError> for tower_lsp::jsonrpc::Error {
+impl From<PathServerError> for tower_lsp_server::jsonrpc::Error {
     fn from(err: PathServerError) -> Self {
         match err {
             PathServerError::EncodingError(msg) => jsonrpc::Error {

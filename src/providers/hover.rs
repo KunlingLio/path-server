@@ -1,4 +1,4 @@
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 
 use crate::Config;
 use crate::document::Document;
@@ -13,7 +13,7 @@ pub async fn provide_hover(
     character: usize,
     config: &Config,
     workspace_roots: &[String],
-) -> PathServerResult<Option<lsp_types::Hover>> {
+) -> PathServerResult<Option<ls_types::Hover>> {
     let Some(current_token) =
         resolve_at_pos(doc, config, workspace_roots, parent, (line, character)).await?
     else {
@@ -23,17 +23,15 @@ pub async fn provide_hover(
         return Ok(None);
     }
     let origin_start =
-        lsp_types::Position::new(current_token.start.0 as u32, current_token.start.1 as u32);
+        ls_types::Position::new(current_token.start.0 as u32, current_token.start.1 as u32);
     let origin_end =
-        lsp_types::Position::new(current_token.end.0 as u32, current_token.end.1 as u32);
-    let origin_range = lsp_types::Range::new(origin_start, origin_end);
+        ls_types::Position::new(current_token.end.0 as u32, current_token.end.1 as u32);
+    let origin_range = ls_types::Range::new(origin_start, origin_end);
 
     let url = fs::path_to_url(&current_token.target)?;
 
-    Ok(Some(lsp_types::Hover {
-        contents: lsp_types::HoverContents::Scalar(lsp_types::MarkedString::String(
-            url.to_string(),
-        )),
+    Ok(Some(ls_types::Hover {
+        contents: ls_types::HoverContents::Scalar(ls_types::MarkedString::String(url.to_string())),
         range: Some(origin_range),
     }))
 }
@@ -42,7 +40,7 @@ pub async fn provide_hover(
 mod tests {
     use super::*;
     use crate::document::Language;
-    use std::fs;
+    use std::{fs, str::FromStr};
     use tempfile::tempdir;
     use tokio;
 
@@ -76,8 +74,8 @@ mod tests {
         assert!(res.is_some());
         let hover = res.unwrap();
         match hover.contents {
-            lsp_types::HoverContents::Scalar(lsp_types::MarkedString::String(s)) => {
-                let url = lsp_types::Url::parse(&s).unwrap();
+            ls_types::HoverContents::Scalar(ls_types::MarkedString::String(s)) => {
+                let url = ls_types::Uri::from_str(&s).unwrap();
                 assert_eq!(
                     tokio::fs::canonicalize(&url.to_file_path().unwrap())
                         .await
@@ -128,8 +126,8 @@ mod tests {
         assert!(res.is_some());
         let hover = res.unwrap();
         match hover.contents {
-            lsp_types::HoverContents::Scalar(lsp_types::MarkedString::String(s)) => {
-                let url = lsp_types::Url::parse(&s).unwrap();
+            ls_types::HoverContents::Scalar(ls_types::MarkedString::String(s)) => {
+                let url = ls_types::Uri::from_str(&s).unwrap();
                 let expected = tokio::fs::canonicalize(&target).await.unwrap();
                 assert_eq!(
                     tokio::fs::canonicalize(&url.to_file_path().unwrap())

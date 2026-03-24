@@ -3,7 +3,7 @@ pub use language::Language;
 
 use line_index::{LineIndex, TextSize, WideEncoding, WideLineCol};
 use tokio::sync::Mutex;
-use tower_lsp::lsp_types;
+use tower_lsp_server::ls_types;
 use tree_sitter::Tree;
 
 use crate::error::*;
@@ -51,7 +51,7 @@ impl Document {
 
     pub fn apply_change(
         &mut self,
-        change: lsp_types::TextDocumentContentChangeEvent,
+        change: ls_types::TextDocumentContentChangeEvent,
     ) -> PathServerResult<()> {
         if change.range.is_none() {
             *self = Self::new(change.text, &self.language.to_string())?;
@@ -262,13 +262,13 @@ World"#;
         assert_eq!(doc.text, text.concat());
 
         // replace second line by range (line 1 start -> line 2 start)
-        let change = lsp_types::TextDocumentContentChangeEvent {
-            range: Some(lsp_types::Range {
-                start: lsp_types::Position {
+        let change = ls_types::TextDocumentContentChangeEvent {
+            range: Some(ls_types::Range {
+                start: ls_types::Position {
                     line: 1,
                     character: 0,
                 },
-                end: lsp_types::Position {
+                end: ls_types::Position {
                     line: 2,
                     character: 0,
                 },
@@ -289,7 +289,7 @@ World"#;
         let mut doc = Document::new(text.concat(), &Language::plain_text.to_string()).unwrap();
         assert_eq!(doc.text, text.concat());
         // full document replace when range is None
-        let full = lsp_types::TextDocumentContentChangeEvent {
+        let full = ls_types::TextDocumentContentChangeEvent {
             range: None,
             range_length: None,
             text: "New beginning\nAnother line\n".to_string(),
