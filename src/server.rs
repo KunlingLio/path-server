@@ -287,7 +287,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
                 .collect::<Vec<_>>()
         )
         .await;
-        return Ok(Some(ls_types::CompletionResponse::Array(completions)));
+        Ok(Some(ls_types::CompletionResponse::Array(completions)))
     }
 
     async fn document_link(
