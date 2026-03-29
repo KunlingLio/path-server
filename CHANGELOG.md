@@ -6,6 +6,9 @@ All notable changes to the Path Server will be documented in this file.
 ### Added
 - **VS Code**: Added icon.png with stress color 0x007fd4.
 
+### Fixed
+- **Core**: Fixed Path Server can only highlight the first path in a token.
+
 ## [0.5.3] - 2026-03-24
 ### Added
 - **VS Code**: Added remote window (e.g. Remote SSH, Dev Container) support.

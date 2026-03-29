@@ -113,6 +113,7 @@ You can customize Path Server's behavior via your editor's settings.
 - [x] Implement "Go to Definition" for file paths.
 - [x] Support path highlight.
 - [x] Support remote window.
+- [ ] Improve path extraction precision.
 - [ ] **Zed**: Support all language by use "wildcard" in extension.toml (Waiting for Zed extension api support)
 
 ## Development

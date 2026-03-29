@@ -70,29 +70,66 @@ async fn filter_exist_path(
     parent: Option<&String>,
     home: Option<&String>,
     document: &Document,
-) -> PathServerResult<Option<ResolvedPath>> {
-    for candidate in candidates {
+) -> PathServerResult<Vec<ResolvedPath>> {
+    let resolved = future::try_join_all(candidates.into_iter().map(|candidate| async move {
         let path = PathBuf::from(&candidate.content);
         if path.is_absolute() {
             if fs::exists(&path).await {
-                return PathServerResult::Ok(Some(
+                PathServerResult::Ok(vec![
                     candidate_to_resolved(&candidate, &path, document).await?,
-                ));
+                ])
+            } else {
+                PathServerResult::Ok(vec![])
             }
         } else if path.is_relative() {
-            for (base_path, _, _) in config.base_paths(workspace_roots, parent, home) {
-                let full_path = base_path.join(&path);
-                if fs::exists(&full_path).await {
-                    return PathServerResult::Ok(Some(
-                        candidate_to_resolved(&candidate, &full_path, document).await?,
-                    ));
-                }
-            }
+            PathServerResult::Ok(
+                future::try_join_all(
+                    config
+                        .base_paths(workspace_roots, parent, home)
+                        .into_iter()
+                        .map(|(base_path, _, _)| {
+                            let path = &path;
+                            let candidate = &candidate;
+                            async move {
+                                let full_path = base_path.join(&path);
+                                if fs::exists(&full_path).await {
+                                    PathServerResult::Ok(Some(
+                                        candidate_to_resolved(&candidate, &full_path, document)
+                                            .await?,
+                                    ))
+                                } else {
+                                    PathServerResult::Ok(None)
+                                }
+                            }
+                        }),
+                )
+                .await?
+                .into_iter()
+                .flatten()
+                .collect(),
+            )
         } else {
             unreachable!();
         }
+    }))
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
+    PathServerResult::Ok(filter_overlapping(resolved))
+}
+
+fn filter_overlapping(tokens: Vec<ResolvedPath>) -> Vec<ResolvedPath> {
+    let mut results: Vec<ResolvedPath> = vec![];
+    'token_loop: for token in tokens {
+        for result in &results {
+            if result.intersects(&token) {
+                continue 'token_loop;
+            }
+        }
+        results.push(token);
     }
-    Ok(None)
+    results
 }
 
 async fn candidate_to_resolved(
