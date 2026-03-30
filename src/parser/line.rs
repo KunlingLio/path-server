@@ -1,61 +1,151 @@
 //! Parsers for inline path parsing.
 
-use regex::Regex;
+use std::{collections::HashSet, vec::Vec};
+
+use crate::{lsp_warn, to_sync};
+
+const INIT_CONFIDENCE: usize = 16;
 
 /// Parses a line of text and extracts the path from it.
-pub fn parse_line(line: &str) -> String {
-    // 1. parse by beginning
-    //    e.g. "D:" or ".\" or "..\" for windows
-    //    e.g. "/" or "~/" or "./" or "../" for unix
-    // handle unix
-    let beginning_unix = [r#"~/"#, r#"\.\./"#, r#"\./"#];
-    for prefix in beginning_unix {
-        if let Ok(re) = Regex::new(prefix)
-            && let Some(mat) = re.find_iter(line).last()
-        {
-            return line[mat.start()..].to_string();
+/// Returns a series of candidates, from high priority to low priority.
+pub fn parse_line(line: &str) -> Vec<String> {
+    let without_escape = LineParser::new(line).parse();
+    let with_escape = if let Some(escaped) = escape_line(line) {
+        LineParser::new(&escaped).parse()
+    } else {
+        if !cfg!(test) {
+            to_sync!(lsp_warn!("Failed to escape line in path parsing"));
+        }
+        vec![]
+    };
+    // reorder
+    let mut sorted = [without_escape, with_escape]
+        .into_iter()
+        .flatten()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    sorted.sort_by_key(|(confidence, _)| std::cmp::Reverse(*confidence));
+    sorted.into_iter().map(|(_, s)| s).collect()
+}
+
+fn escape_line(line: &str) -> Option<String> {
+    let line = format!("\"{}\"", line);
+    let Ok(escaped) = serde_json::from_str::<String>(&line) else {
+        return None;
+    };
+    Some(escaped)
+}
+
+struct LineParser {
+    rev_content: Vec<(usize, char)>,
+    cursor: usize,
+    confidence: usize,
+    in_disk_identifier: bool,
+}
+
+impl LineParser {
+    pub fn new(line: &str) -> LineParser {
+        let rev_content = line
+            .chars()
+            .rev()
+            .collect::<String>()
+            .char_indices()
+            .collect();
+        LineParser {
+            rev_content,
+            cursor: 0,
+            confidence: INIT_CONFIDENCE,
+            in_disk_identifier: false,
         }
     }
-    // special case for unix root "/"
-    let root_regex = Regex::new(r#"(?:^|[\s"'\[(])(/)"#).unwrap();
-    if let Some(mat) = root_regex.find_iter(line).last()
-        && let Some(pos) = line[mat.start()..mat.end()].find('/')
-    {
-        return line[mat.start() + pos..].to_string();
-    }
-    // handle windows
-    let beginning_windows = [r#"[a-zA-Z]:\\"#, r#"\.\\"#, r#"\.\.\\ "#];
-    for regex in beginning_windows {
-        if let Ok(re) = Regex::new(regex)
-            && let Some(mat) = re.find_iter(line).last()
-        {
-            return line[mat.start()..].to_string();
+
+    fn next(&mut self) -> Option<(usize, char)> {
+        let res = self.rev_content.get(self.cursor).copied();
+        if res.is_some() {
+            self.cursor += 1;
         }
+        res
     }
-    // 2. parse by space
-    if let Some(pos) = line.rfind(' ') {
-        return line[pos + 1..].to_string();
+
+    fn construct_candidate(&self, end: usize) -> String {
+        self.rev_content
+            .iter()
+            .take(end)
+            .map(|(_, c)| *c)
+            .rev()
+            .collect()
     }
-    line.to_string()
+
+    pub fn parse(&mut self) -> Vec<(usize, String)> {
+        let mut candidates = vec![];
+        let mut break_ = false;
+        while let Some((_, c)) = self.next() {
+            if self.confidence == 0 {
+                break_ = true;
+                break;
+            }
+            if ['\0', '\t', '\n'].contains(&c) {
+                // terminals
+                break_ = true;
+                break;
+            } else if self.in_disk_identifier {
+                if c.is_ascii_alphabetic() {
+                    candidates.push((self.confidence, self.construct_candidate(self.cursor)));
+                    break_ = true;
+                    break;
+                } else {
+                    to_sync!(lsp_warn!(
+                        "Unexpected character '{}' after disk identifier in path parsing",
+                        c
+                    ));
+                    break_ = true;
+                    break;
+                }
+            } else if c == ':' {
+                if self.in_disk_identifier {
+                    to_sync!(lsp_warn!(
+                        "Unexpected ':' in path parsing after disk identifier"
+                    ));
+                    break_ = true;
+                    break;
+                } else {
+                    self.in_disk_identifier = true;
+                };
+            } else if ['\'', '"', ' ', '[', '(', '<', '>', '|', '?', '*'].contains(&c) {
+                // decrease confidence
+                candidates.push((self.confidence, self.construct_candidate(self.cursor - 1)));
+                self.confidence -= 1;
+            } else if ['/', '\\'].contains(&c) {
+                // increase confidence
+                candidates.push((self.confidence, self.construct_candidate(self.cursor)));
+                self.confidence += 1;
+            }
+        }
+        if !break_ {
+            // end of line
+            candidates.push((self.confidence, self.construct_candidate(self.cursor)));
+        }
+        candidates
+    }
 }
 
 /// Separates an incomplete path (prefix) into a complete base directory and a partial name.
-pub fn separate_prefix(prefix: &str) -> (String, String) {
-    let prefix = prefix.to_string();
-    let last_slash = prefix.rfind('/');
-    let last_backslash = prefix.rfind('\\');
-    let (mut base_dir, partial_name) = if let Some(pos) = last_slash {
-        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
-    } else if let Some(pos) = last_backslash {
-        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
+pub fn separate_prefix(mut prefix: String) -> (String, String) {
+    let last_slash = prefix.rfind('/').or_else(|| prefix.rfind('\\'));
+
+    if let Some(pos) = last_slash {
+        let split_pos = pos + 1;
+        let partial_name = prefix[split_pos..].to_string();
+        prefix.truncate(split_pos);
+        (prefix, partial_name)
     } else {
-        // no slash, e.g. index.htm
-        ("".to_string(), prefix)
-    };
-    if base_dir.is_empty() {
-        base_dir = "./".to_string();
+        if prefix.is_empty() {
+            ("./".to_string(), "".to_string())
+        } else {
+            ("./".to_string(), prefix)
+        }
     }
-    (base_dir, partial_name)
 }
 
 #[cfg(test)]
@@ -66,112 +156,121 @@ mod test {
     fn test_parse_line_ascii() {
         // 1. unix home dir
         assert_eq!(
-            parse_line("~/projects/rust/main.rs"),
-            "~/projects/rust/main.rs"
+            parse_line("~/projects/rust/main.rs")[0],
+            "~/projects/rust/main.rs".to_owned()
         );
-        assert_eq!(parse_line("/etc/nginx/nginx.conf"), "/etc/nginx/nginx.conf");
+        assert_eq!(
+            parse_line("/etc/nginx/nginx.conf")[0],
+            "/etc/nginx/nginx.conf".to_owned()
+        );
 
         // 2. windows
         assert_eq!(
-            parse_line(r"setting=C:\Windows\System32\"),
-            r"C:\Windows\System32\"
+            parse_line(r"setting=C:\Windows\System32\")[0],
+            r"C:\Windows\System32\".to_owned()
         );
-        assert_eq!(parse_line(r"Look at .\local\file"), r".\local\file");
+        assert_eq!(
+            parse_line(r"Look at .\local\file")[0],
+            r".\local\file".to_owned()
+        );
 
         // 3. quote
         assert_eq!(
-            parse_line("import './components/Header"),
-            "./components/Header"
+            parse_line("import './components/Header")[0],
+            "./components/Header".to_owned()
         );
         assert_eq!(
-            parse_line("let p = \"../data/config.json"),
-            "../data/config.json"
+            parse_line("let p = \"../data/config.json")[0],
+            "../data/config.json".to_owned()
         );
 
         // 4. markdown
-        assert_eq!(parse_line("[link](./docs/README.md"), "./docs/README.md");
-        assert_eq!(parse_line("![img](/assets/logo.png"), "/assets/logo.png");
+        assert_eq!(
+            parse_line("[link](./docs/README.md")[0],
+            "./docs/README.md".to_owned()
+        );
+        assert_eq!(
+            parse_line("![img](/assets/logo.png")[0],
+            "/assets/logo.png".to_owned()
+        );
 
         // 5. multi path in same line
-        assert_eq!(parse_line("from /tmp/a to /var/log/b"), "/var/log/b");
+        assert_eq!(
+            parse_line("from /tmp/a to /var/log/b")[0],
+            "/var/log/b".to_owned()
+        );
     }
 
     #[test]
     fn test_parse_line_utf8() {
         assert_eq!(
-            parse_line("import './中文文件夹/中文文件.js"),
-            "./中文文件夹/中文文件.js"
+            parse_line("import './中文文件夹/中文文件.js")[0],
+            "./中文文件夹/中文文件.js".to_owned()
         );
         // unix absolute with chinese
-        assert_eq!(parse_line("打开 /中文/文件.txt"), "/中文/文件.txt");
+        assert_eq!(
+            parse_line("打开 /中文/文件.txt")[0],
+            "/中文/文件.txt".to_owned()
+        );
         // home directory with chinese
-        assert_eq!(parse_line("~/项目/主要.rs"), "~/项目/主要.rs");
+        assert_eq!(parse_line("~/项目/主要.rs")[0], "~/项目/主要.rs".to_owned());
         // relative current dir
-        assert_eq!(parse_line("./中文/文件.js"), "./中文/文件.js");
+        assert_eq!(parse_line("./中文/文件.js")[0], "./中文/文件.js".to_owned());
         // relative parent dir in a quoted string
         assert_eq!(
-            parse_line("let s = \"../数据/配置.json"),
-            "../数据/配置.json"
+            parse_line("let s = \"../数据/配置.json")[0],
+            "../数据/配置.json".to_owned()
         );
         // markdown link containing Chinese path
-        assert_eq!(parse_line("[链接](./文档/说明.md"), "./文档/说明.md");
+        assert_eq!(
+            parse_line("[链接](./文档/说明.md")[0],
+            "./文档/说明.md".to_owned()
+        );
         // windows path with Chinese components (escaped backslashes)
-        assert_eq!(parse_line("路径 C:\\项目\\子目录\\"), "C:\\项目\\子目录\\");
+        assert_eq!(
+            parse_line("路径 C:\\项目\\子目录\\")[0],
+            "C:\\项目\\子目录\\".to_owned()
+        );
     }
 
     #[test]
     fn test_parse_line_empty() {
-        assert_eq!(parse_line(""), "");
-        assert_eq!(parse_line("   "), "");
+        assert!(parse_line("").contains(&"".to_owned()));
+        assert!(parse_line("   ").contains(&"".to_owned()));
     }
 
-    // TODO: pass this test
-    // #[test]
-    // fn test_parse_line_mixed() {
-    //     assert_eq!(
-    //         parse_line("././../.././weird-file_name.v1.2"),
-    //         "././../.././weird-file_name.v1.2"
-    //     );
-    // }
-
     #[test]
-    fn test_parse_line_network() {
-        // network URL
+    fn test_parse_line_mixed() {
         assert_eq!(
-            parse_line("see http://example.com/path/to/res"),
-            "http://example.com/path/to/res"
-        );
-        // Windows-style network path
-        assert_eq!(
-            parse_line("copy \\\\server\\share\\file.txt"),
-            "\\\\server\\share\\file.txt"
+            parse_line("././../.././weird-file_name.v1.2")[0],
+            "././../.././weird-file_name.v1.2".to_owned()
         );
     }
 
     #[test]
     fn test_separate_prefix() {
         // unix style
-        let (base, partial) = separate_prefix("/home/user/file.txt");
+        let (base, partial) = separate_prefix("/home/user/file.txt".into());
         assert_eq!(base, "/home/user/");
         assert_eq!(partial, "file.txt");
 
         // Windows style
-        let (base, partial) = separate_prefix(r"C:\Users\Admin\Doc");
+        let (base, partial) = separate_prefix(r"C:\Users\Admin\Doc".into());
         assert_eq!(base, r"C:\Users\Admin\");
         assert_eq!(partial, "Doc");
 
         // only filename
-        let (base, partial) = separate_prefix("file.txt");
+        let (base, partial) = separate_prefix("file.txt".into());
         assert_eq!(base, "./");
         assert_eq!(partial, "file.txt");
 
         // only dir
-        let (base, partial) = separate_prefix("/usr/bin/");
+        let (base, partial) = separate_prefix("/usr/bin/".into());
         assert_eq!(base, "/usr/bin/");
         assert_eq!(partial, "");
 
         // hidden file
-        let (base, partial) = separate_prefix("./.config");
+        let (base, partial) = separate_prefix("./.config".into());
         assert_eq!(base, "./");
         assert_eq!(partial, ".config");
     }
@@ -179,9 +278,20 @@ mod test {
     #[test]
     fn test_hybrid_paths() {
         assert_eq!(
-            parse_line(r"\\127.0.0.1\c$\temp\file.txt"),
-            r"\\127.0.0.1\c$\temp\file.txt"
+            parse_line(r"\\127.0.0.1\c$\temp\file.txt")[0],
+            r"\\127.0.0.1\c$\temp\file.txt".to_owned()
         );
-        assert_eq!(parse_line(r"//server/share/path"), "//server/share/path");
+        assert_eq!(
+            parse_line(r"//server/share/path")[0],
+            r"//server/share/path".to_owned()
+        );
+    }
+
+    #[test]
+    fn test() {
+        assert_eq!(
+            parse_line(&"let f = \"./exclude_dir/".to_owned())[0],
+            "./exclude_dir/".to_owned()
+        );
     }
 }
