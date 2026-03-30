@@ -105,6 +105,7 @@ You can customize Path Server's behavior via your editor's settings.
 ## Resources
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
 - [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=LKL.path-server)
+- [Path Server Icon](https://pictogrammers.com/library/mdi/icon/slash-forward-box/)
 
 ## TODO
 - [x] Support relative and absolute path completion.
