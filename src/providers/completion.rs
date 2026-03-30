@@ -6,10 +6,11 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use tower_lsp_server::ls_types;
 
 use crate::config;
+use crate::document::Document;
 use crate::error::*;
 use crate::fs;
 use crate::parser;
-use crate::{lsp_debug, lsp_warn};
+use crate::{lsp_debug, lsp_info, lsp_warn};
 
 /// The wrapper struct inside this module to store additional information.
 struct CompletionItemInner {
@@ -18,68 +19,74 @@ struct CompletionItemInner {
 }
 
 pub async fn provide_completion(
-    prefix: &str,
+    doc: &Document,
+    (line_number, character): (usize, usize),
     workspace_roots: &[String],
     current_file_parent: &Option<String>,
     completion_config: &config::Config,
 ) -> PathServerResult<Vec<ls_types::CompletionItem>> {
-    let (base_dir, partial_name) = parser::separate_prefix(prefix);
-    lsp_debug!(
-        "Detected base_dir: '{}', partial_name: '{}'",
-        base_dir,
-        partial_name
-    )
-    .await;
-    let base_dir = expand_tilde(&base_dir)?;
-    let base_dir = PathBuf::from(base_dir);
+    let line_prefix = doc.get_line(line_number, Some(character))?;
+    for path_candidate in parser::parse_line(&line_prefix) {
+        let (base_dir, partial_name) = parser::separate_prefix(path_candidate.clone());
+        let base_dir = PathBuf::from(expand_tilde(&base_dir)?);
 
-    let completions: Vec<CompletionItemInner> = if base_dir.is_absolute() {
-        // absolute path
-        generate_completions(
-            &base_dir,
-            &partial_name,
-            Path::new(""),
-            "absolute",
-            &0,
-            completion_config.completion.show_hidden_files,
-            completion_config.completion.trigger_next_completion,
-        )
-        .await?
-    } else if base_dir.is_relative() {
-        // relative path
-        let home = std::env::var("HOME").ok();
-        let base_paths = completion_config.base_paths(
-            workspace_roots,
-            current_file_parent.as_ref(),
-            home.as_ref(),
-        );
-
-        future::try_join_all(base_paths.iter().map(async |(base_path, schema, order)| {
+        let completions: Vec<CompletionItemInner> = if base_dir.is_absolute() {
+            // absolute path
             generate_completions(
                 &base_dir,
                 &partial_name,
-                base_path,
-                schema,
-                order,
+                Path::new(""),
+                "absolute",
+                &0,
                 completion_config.completion.show_hidden_files,
                 completion_config.completion.trigger_next_completion,
             )
-            .await
-        }))
-        .await?
-        .into_iter()
-        .flatten()
-        .collect()
-    } else {
-        unreachable!()
-    };
+            .await?
+        } else if base_dir.is_relative() {
+            // relative path
+            let home = std::env::var("HOME").ok();
+            let base_paths = completion_config.base_paths(
+                workspace_roots,
+                current_file_parent.as_ref(),
+                home.as_ref(),
+            );
 
-    Ok(filter(
-        completions,
-        completion_config.completion.max_results,
-        &completion_config.completion.exclude,
-    )
-    .await)
+            future::try_join_all(base_paths.iter().map(async |(base_path, schema, order)| {
+                generate_completions(
+                    &base_dir,
+                    &partial_name,
+                    base_path,
+                    schema,
+                    order,
+                    completion_config.completion.show_hidden_files,
+                    completion_config.completion.trigger_next_completion,
+                )
+                .await
+            }))
+            .await?
+            .into_iter()
+            .flatten()
+            .collect()
+        } else {
+            unreachable!()
+        };
+        if !completions.is_empty() {
+            lsp_info!("[Completion] Completing for prefix: '{:}'", path_candidate).await;
+            lsp_debug!(
+                "Detected base_dir: '{}', partial_name: '{}'",
+                base_dir.display(),
+                partial_name
+            )
+            .await;
+            return Ok(filter(
+                completions,
+                completion_config.completion.max_results,
+                &completion_config.completion.exclude,
+            )
+            .await);
+        }
+    }
+    Ok(vec![])
 }
 
 /// Expand "~" to the user's home directory
@@ -266,9 +273,11 @@ mod tests {
                 highlight_directory: true,
             },
         };
+        let document = Document::new("./data/a".to_string(), "unknown").unwrap();
 
         let items = provide_completion(
-            "./data/a",
+            &document,
+            (0, "./data/a".to_string().len()),
             &roots,
             &Option::Some(current_file_parent),
             &config,

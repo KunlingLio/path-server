@@ -12,7 +12,6 @@ use crate::document::Document;
 use crate::error::*;
 use crate::fs;
 use crate::logger::{self};
-use crate::parser;
 use crate::providers;
 use crate::{lsp_debug, lsp_error, lsp_info};
 
@@ -273,18 +272,19 @@ impl tower_lsp_server::LanguageServer for PathServer {
                 "Document {} not found, please open it before completion",
                 params.text_document_position.text_document.uri.as_str()
             )))?;
-        let line_prefix = doc.get_line(line_number, Some(character))?;
-
-        // parse the line
-        let raw_path = parser::parse_line(&line_prefix);
-        lsp_info!("[Completion] Completing for prefix: '{}'", raw_path).await;
 
         // completion
         let config = self.get_config().await;
         let workspace_roots = self.workspace_paths().await;
         let parent = Self::doc_parent(&params.text_document_position.text_document.uri);
-        let completions =
-            providers::provide_completion(&raw_path, &workspace_roots, &parent, &config).await?;
+        let completions = providers::provide_completion(
+            doc,
+            (line_number, character),
+            &workspace_roots,
+            &parent,
+            &config,
+        )
+        .await?;
         lsp_info!("[Completion] Generated {} completions", completions.len()).await;
         lsp_debug!(
             "{:?}",

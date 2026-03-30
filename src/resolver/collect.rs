@@ -70,29 +70,68 @@ async fn filter_exist_path(
     parent: Option<&String>,
     home: Option<&String>,
     document: &Document,
-) -> PathServerResult<Option<ResolvedPath>> {
-    for candidate in candidates {
+) -> PathServerResult<Vec<ResolvedPath>> {
+    let resolved = future::try_join_all(candidates.into_iter().map(|candidate| async move {
         let path = PathBuf::from(&candidate.content);
         if path.is_absolute() {
             if fs::exists(&path).await {
-                return PathServerResult::Ok(Some(
+                PathServerResult::Ok(vec![
                     candidate_to_resolved(&candidate, &path, document).await?,
-                ));
+                ])
+            } else {
+                PathServerResult::Ok(vec![])
             }
         } else if path.is_relative() {
-            for (base_path, _, _) in config.base_paths(workspace_roots, parent, home) {
-                let full_path = base_path.join(&path);
-                if fs::exists(&full_path).await {
-                    return PathServerResult::Ok(Some(
-                        candidate_to_resolved(&candidate, &full_path, document).await?,
-                    ));
-                }
-            }
+            PathServerResult::Ok(
+                future::try_join_all(
+                    config
+                        .base_paths(workspace_roots, parent, home)
+                        .into_iter()
+                        .map(|(base_path, _, _)| {
+                            let path = &path;
+                            let candidate = &candidate;
+                            async move {
+                                let full_path = base_path.join(path);
+                                if fs::exists(&full_path).await {
+                                    PathServerResult::Ok(Some(
+                                        candidate_to_resolved(candidate, &full_path, document)
+                                            .await?,
+                                    ))
+                                } else {
+                                    PathServerResult::Ok(None)
+                                }
+                            }
+                        }),
+                )
+                .await?
+                .into_iter()
+                .flatten()
+                .collect(),
+            )
         } else {
             unreachable!();
         }
+    }))
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
+    PathServerResult::Ok(filter_overlapping(resolved))
+}
+
+/// Filter out tokens that point to overlapping positions, keep the one with higher priority (which is generated earlier)
+/// Because the order of candidates is from high priority to low priority, we have to use the O(n^2) algorithm
+fn filter_overlapping(tokens: Vec<ResolvedPath>) -> Vec<ResolvedPath> {
+    let mut results: Vec<ResolvedPath> = vec![];
+    'token_loop: for token in tokens {
+        for result in &results {
+            if result.intersects(&token) {
+                continue 'token_loop;
+            }
+        }
+        results.push(token);
     }
-    Ok(None)
+    results
 }
 
 async fn candidate_to_resolved(
@@ -108,4 +147,45 @@ async fn candidate_to_resolved(
         target: tokio::fs::canonicalize(&path).await?,
         is_dir: fs::is_dir(path).await,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_resolved_path(
+        start_line: usize,
+        start_character: usize,
+        end_line: usize,
+        end_character: usize,
+    ) -> ResolvedPath {
+        ResolvedPath {
+            start: (start_line, start_character),
+            end: (end_line, end_character),
+            target: PathBuf::from("dummy-target"),
+            is_dir: false,
+        }
+    }
+    #[test]
+    fn filter_overlapping_drops_later_overlapping_token() {
+        // token1: [0:0, 0:5), token2: [0:3, 0:8) => overlapping
+        let token1 = make_resolved_path(0, 0, 0, 5);
+        let token2 = make_resolved_path(0, 3, 0, 8);
+        let filtered = filter_overlapping(vec![token1.clone(), token2]);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].start, token1.start);
+        assert_eq!(filtered[0].end, token1.end);
+    }
+    #[test]
+    fn filter_overlapping_keeps_non_overlapping_tokens() {
+        // token1: [0:0, 0:5), token2: [0:6, 0:10) => non-overlapping
+        let token1 = make_resolved_path(0, 0, 0, 5);
+        let token2 = make_resolved_path(0, 6, 0, 10);
+        let filtered = filter_overlapping(vec![token1.clone(), token2.clone()]);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].start, token1.start);
+        assert_eq!(filtered[0].end, token1.end);
+        assert_eq!(filtered[1].start, token2.start);
+        assert_eq!(filtered[1].end, token2.end);
+    }
 }

@@ -2,6 +2,18 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **VS Code**: Added icon.png with stress color 0x007fd4.
+
+### Fixed
+- **Core**: Fixed Path Server can only highlight the first path in a token.
+- **Core**: Fixed completion can only complete for the nearest `../` or `./` in the current line.
+- **Core**: Fixed incorrect highlighting of single character paths (e.g. `/`).
+
+### Improved
+- **Core**: Improved path parsing logic for higher accuracy.
+
 ## [0.5.3] - 2026-03-24
 ### Added
 - **VS Code**: Added remote window (e.g. Remote SSH, Dev Container) support.

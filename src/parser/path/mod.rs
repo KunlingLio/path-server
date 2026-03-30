@@ -39,7 +39,12 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
     }
 
     // Level 2: the part of string (split by space) is a path or not
-    results.extend(path_ref.split(&[' ', '\n']));
+    results.extend(
+        path_ref
+            .split(&[' ', '\n'])
+            .into_iter()
+            .filter(|part| !(part.content == "/" || part.content == "\\")), // drop single slash
+    );
 
     results
 }
@@ -113,5 +118,15 @@ mod tests {
             eprintln!("Extracted: {};", p.content);
         }
         assert!(res.iter().any(|p| p.content.trim() == "/tmp/目录/"));
+    }
+    #[test]
+    fn test_filter_slash() {
+        let candidate = PathCandidate {
+            content: "a / b".to_string(),
+            start_byte: 0,
+            end_byte: 1,
+        };
+        let res = extract_paths_from_string(candidate);
+        assert!(!res.into_iter().map(|p| p.content).any(|c| c == "/"));
     }
 }
