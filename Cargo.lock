@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "path-server"
-version = "0.5.3"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "config",

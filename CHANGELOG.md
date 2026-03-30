@@ -2,7 +2,8 @@
 
 All notable changes to the Path Server will be documented in this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-03-30
+Path Server has reached version 1.0.0! This release indicates that the API is now stable and future updates will focus on improvements and bug fixes.
 ### Added
 - **VS Code**: Added icon.png with stress color 0x007fd4.
 
@@ -12,7 +13,8 @@ All notable changes to the Path Server will be documented in this file.
 - **Core**: Fixed incorrect highlighting of single character paths (e.g. `/`).
 
 ### Improved
-- **Core**: Improved path parsing logic for higher accuracy.
+- **Core**: Improved path highlighting logic for higher accuracy.
+- **Core**: **Fully refactored** path completion logic from regex into a manual state machine to support more complex scenarios and improve accuracy.
 
 ## [0.5.3] - 2026-03-24
 ### Added
