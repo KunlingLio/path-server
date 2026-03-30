@@ -1,6 +1,6 @@
 //! Parsers for inline path parsing.
 
-use std::{collections::HashSet, vec::Vec};
+use std::vec::Vec;
 
 use crate::{lsp_warn, to_sync};
 
@@ -13,18 +13,16 @@ pub fn parse_line(line: &str) -> Vec<String> {
     let with_escape = if let Some(escaped) = escape_line(line) {
         LineParser::new(&escaped).parse()
     } else {
-        if !cfg!(test) {
-            to_sync!(lsp_warn!("Failed to escape line in path parsing"));
-        }
         vec![]
     };
-    // reorder
     let mut sorted = [without_escape, with_escape]
         .into_iter()
         .flatten()
-        .collect::<HashSet<_>>() // avoid duplicates
-        .into_iter()
         .collect::<Vec<_>>();
+    // deduplicate only by string
+    sorted.sort_by(|a, b| a.1.cmp(&b.1));
+    sorted.dedup_by(|a, b| a.1 == b.1);
+    // sort
     sorted.sort_by(|x, y| {
         // confidence desc
         y.0.cmp(&x.0)
@@ -70,22 +68,22 @@ impl LineParser {
     }
 
     fn peek_prev(&self) -> Option<char> {
-        if self.cursor == 0 {
+        if self.cursor < 2 {
             None
         } else {
             self.rev_content
-                .get(self.cursor - 1)
+                .get(self.cursor - 2)
                 .copied()
                 .map(|(_, c)| c)
         }
     }
 
     fn peek_prev_prev(&self) -> Option<char> {
-        if self.cursor < 2 {
+        if self.cursor < 3 {
             None
         } else {
             self.rev_content
-                .get(self.cursor - 2)
+                .get(self.cursor - 3)
                 .copied()
                 .map(|(_, c)| c)
         }

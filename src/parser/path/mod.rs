@@ -119,4 +119,14 @@ mod tests {
         }
         assert!(res.iter().any(|p| p.content.trim() == "/tmp/目录/"));
     }
+    #[test]
+    fn test_filter_slash() {
+        let candidate = PathCandidate {
+            content: "a / b".to_string(),
+            start_byte: 0,
+            end_byte: 1,
+        };
+        let res = extract_paths_from_string(candidate);
+        assert!(!res.into_iter().map(|p| p.content).any(|c| c == "/"));
+    }
 }
