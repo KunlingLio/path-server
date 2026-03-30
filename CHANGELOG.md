@@ -9,6 +9,7 @@ All notable changes to the Path Server will be documented in this file.
 ### Fixed
 - **Core**: Fixed Path Server can only highlight the first path in a token.
 - **Core**: Fixed completion can only complete for the nearest `../` or `./` in the current line.
+- **Core**: Fixed highlighting single character paths (e.g. `/`).
 
 ### Improved
 - **Core**: Improved path parsing logic for higher accuracy.

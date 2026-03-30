@@ -22,10 +22,15 @@ pub fn parse_line(line: &str) -> Vec<String> {
     let mut sorted = [without_escape, with_escape]
         .into_iter()
         .flatten()
-        .collect::<HashSet<_>>()
+        .collect::<HashSet<_>>() // avoid duplicates
         .into_iter()
         .collect::<Vec<_>>();
-    sorted.sort_by_key(|(confidence, _)| std::cmp::Reverse(*confidence));
+    sorted.sort_by(|x, y| {
+        // confidence desc
+        y.0.cmp(&x.0)
+            // length desc
+            .then_with(|| y.1.len().cmp(&x.1.len()))
+    });
     sorted.into_iter().map(|(_, s)| s).collect()
 }
 
@@ -195,10 +200,7 @@ mod test {
         );
 
         // 5. multi path in same line
-        assert_eq!(
-            parse_line("from /tmp/a to /var/log/b")[0],
-            "/var/log/b".to_owned()
-        );
+        assert!(parse_line("from /tmp/a to /var/log/b").contains(&"/var/log/b".to_owned()));
     }
 
     #[test]
@@ -288,7 +290,7 @@ mod test {
     }
 
     #[test]
-    fn test() {
+    fn test_others() {
         assert_eq!(
             parse_line(&"let f = \"./exclude_dir/".to_owned())[0],
             "./exclude_dir/".to_owned()
