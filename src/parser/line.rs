@@ -29,6 +29,7 @@ pub fn parse_line(line: &str) -> Vec<String> {
             // length desc
             .then_with(|| y.1.len().cmp(&x.1.len()))
     });
+    eprintln!("@@@ Candidates before filtering: {:#?}", sorted);
     sorted.into_iter().map(|(_, s)| s).collect()
 }
 
@@ -148,13 +149,15 @@ impl LineParser {
                 }
                 '\'' | '"' | ' ' | '[' | '(' | '<' | '>' | '|' | '?' | '*' => {
                     // decrease confidence
+                    // exclude the terminal char, decrease confidence after pushing candidate
                     candidates.push((self.confidence, self.construct_candidate(self.cursor - 1)));
                     self.confidence -= 1;
                 }
                 '/' | '\\' => {
                     // increase confidence
-                    candidates.push((self.confidence, self.construct_candidate(self.cursor)));
+                    // include slash, increase confidence before pushing candidate
                     self.confidence += 1;
+                    candidates.push((self.confidence, self.construct_candidate(self.cursor)));
                 }
                 '.' => {
                     if matches!(self.peek_prev(), Some('/' | '\\'))
