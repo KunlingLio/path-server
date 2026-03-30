@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Fixed
+- **Core**: Removed unexpected log print when toggle completion.
+
 ## [1.0.0] - 2026-03-30
 Path Server has reached version 1.0.0! This release indicates that the API is now stable and future updates will focus on improvements and bug fixes.
 ### Added

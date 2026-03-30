@@ -29,7 +29,6 @@ pub fn parse_line(line: &str) -> Vec<String> {
             // length desc
             .then_with(|| y.1.len().cmp(&x.1.len()))
     });
-    eprintln!("@@@ Candidates before filtering: {:#?}", sorted);
     sorted.into_iter().map(|(_, s)| s).collect()
 }
 
