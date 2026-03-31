@@ -1,5 +1,5 @@
 # Path Server
-Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion, highlight and navigation, offering a **Path Intellisense** experience.
+Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion, highlight and navigation, offering a **Path Intellisense** experience across different editors.
 
 <div align="center">
     <img src="./assets/demo-vscode.gif" alt="demo" style="width: 600px">
