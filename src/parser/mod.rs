@@ -1,6 +1,7 @@
 mod line;
 mod path;
 mod tree_sitter;
+mod unescape;
 
 pub use line::{parse_line, separate_prefix};
 pub use path::parse_document;

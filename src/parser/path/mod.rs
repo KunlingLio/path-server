@@ -3,11 +3,10 @@ mod regex;
 
 use std::vec::Vec;
 
-use crate::document::Document;
-use crate::error::*;
-
 use super::PathCandidate;
 use super::tree_sitter;
+use crate::document::Document;
+use crate::error::*;
 
 pub fn parse_document(document: &Document) -> PathServerResult<Vec<Vec<PathCandidate>>> {
     Ok(extract_string(document)?
@@ -19,12 +18,13 @@ pub fn parse_document(document: &Document) -> PathServerResult<Vec<Vec<PathCandi
 /// Extract string tokens from the document
 fn extract_string(document: &Document) -> PathServerResult<Vec<PathCandidate>> {
     let res = tree_sitter::extract_strings(document)?;
-    if let Some(res) = res {
-        Ok(res)
+    let res = if let Some(res) = res {
+        res
     } else {
         // fall back to general parser
-        Ok(regex::extract_string(document).unwrap_or_default())
-    }
+        regex::extract_string(document).unwrap_or_default()
+    };
+    Ok(res)
 }
 
 /// Try to extract paths from a string token,

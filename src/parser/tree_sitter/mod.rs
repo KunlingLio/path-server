@@ -1,4 +1,5 @@
 //! Extract strings token by tree-sitter lib
+mod ts_dockerfile;
 mod ts_general;
 mod ts_html;
 mod ts_markdown;
@@ -24,6 +25,7 @@ pub mod ts_languages {
     static HTML_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static C_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static CPP_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static DOCKERFILE_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
 
     pub fn get_js_language() -> tree_sitter::Language {
         JS_LANGUAGE
@@ -79,6 +81,12 @@ pub mod ts_languages {
             .clone()
     }
 
+    pub fn get_dockerfile_language() -> tree_sitter::Language {
+        DOCKERFILE_LANGUAGE
+            .get_or_init(tree_sitter_dockerfile_updated::language)
+            .clone()
+    }
+
     /// Convert from Language, return None if not supported
     pub fn from_language(language: &Language) -> Option<tree_sitter::Language> {
         match language {
@@ -90,6 +98,7 @@ pub mod ts_languages {
             Language::html => Some(get_html_language()),
             Language::c => Some(get_c_language()),
             Language::c_plus_plus => Some(get_cpp_language()),
+            Language::dockerfile => Some(get_dockerfile_language()),
             _ => None,
         }
     }
@@ -167,6 +176,9 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
         | Language::c
         | Language::c_plus_plus => {
             ts_general::extract_strings(&document.text, &tree.root_node(), &document.language)
+        }
+        Language::dockerfile => {
+            ts_dockerfile::extract_strings(&document.text, &tree.root_node(), &document.language)
         }
         _ => unreachable!("Unsupported language: {}", document.language),
     };
@@ -531,5 +543,50 @@ Project Timer is a lightweight VS Code extension that tracks the time you spend 
         let res = parse_and_extract(Language::c_plus_plus, path_in_include);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "path/to/header.h"));
+    }
+
+    #[test]
+    fn test_dockerfile_extract_path() {
+        let dockerfile = r#"
+FROM python:3.13-slim AS production
+WORKDIR /workdir
+# Configure uv
+RUN pip install --no-cache-dir uv -i ./pip/index/simple/
+ENV UV_INDEX_URL=./uv/index/simple/
+# Enable bytecode compilation
+ENV UV_COMPILE_BYTECODE=1
+# Copy from the cache instead of linking since it's a mounted volume
+ENV UV_LINK_MODE=copy
+# Omit development dependencies
+ENV UV_NO_DEV=1
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-install-project --no-group worker --no-group dev --group server
+# Copy src
+COPY server /workdir/server
+# Copy migration
+COPY migrations /workdir/migrations
+# Use the non-root user to run our application
+USER nonroot
+# Run server
+CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn server.main:app --host 0.0.0.0 --port 80 --access-log"]
+"#;
+        print_tree(&Language::dockerfile, dockerfile);
+        let res = parse_and_extract(Language::dockerfile, dockerfile);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "/workdir"));
+        assert!(res.iter().any(|c| c.content == "./pip/index/simple/"));
+        assert!(res.iter().any(|c| c.content == "./uv/index/simple/"));
+        assert!(
+            res.iter()
+                .any(|c| matches!(c.content.as_str(), "pyproject.toml" | "uv.lock" | "./"))
+        );
+        assert!(
+            res.iter()
+                .any(|c| matches!(c.content.as_str(), "server" | "workdir/server"))
+        );
+        assert!(
+            res.iter()
+                .any(|c| matches!(c.content.as_str(), "migrations" | "workdir/migrations"))
+        );
     }
 }
