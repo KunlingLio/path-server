@@ -570,10 +570,7 @@ RUN uv sync --locked --no-install-project --no-group worker --no-group dev --gro
 COPY server /workdir/server
 # Copy migration
 COPY migrations /workdir/migrations
-# Use the non-root user to run our application
-USER nonroot
-# Run server
-CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn server.main:app --host 0.0.0.0 --port 80 --access-log"]
+RUN ./中文/路径/out
 "#;
         print_tree(&Language::dockerfile, dockerfile);
         let res = parse_and_extract(Language::dockerfile, dockerfile);
@@ -583,15 +580,23 @@ CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn server.main:app 
         assert!(res.iter().any(|c| c.content == "./uv/index/simple/"));
         assert!(
             res.iter()
-                .any(|c| matches!(c.content.as_str(), "pyproject.toml" | "uv.lock" | "./"))
+                .any(|c| matches!(c.content.as_str(), "pyproject.toml"))
+        );
+        assert!(res.iter().any(|c| matches!(c.content.as_str(), "uv.lock")));
+        assert!(res.iter().any(|c| matches!(c.content.as_str(), "./")));
+        assert!(res.iter().any(|c| matches!(c.content.as_str(), "server")));
+        assert!(
+            res.iter()
+                .any(|c| matches!(c.content.as_str(), "/workdir/server"))
         );
         assert!(
             res.iter()
-                .any(|c| matches!(c.content.as_str(), "server" | "workdir/server"))
+                .any(|c| matches!(c.content.as_str(), "migrations"))
         );
         assert!(
             res.iter()
-                .any(|c| matches!(c.content.as_str(), "migrations" | "workdir/migrations"))
+                .any(|c| matches!(c.content.as_str(), "/workdir/migrations"))
         );
+        assert!(res.iter().any(|c| c.content == "./中文/路径/out"),)
     }
 }

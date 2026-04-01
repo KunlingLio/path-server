@@ -12,8 +12,8 @@ const INIT_CONFIDENCE: usize = 16;
 /// Returns a series of candidates, from high priority to low priority.
 pub fn parse_line(line: &str) -> Vec<String> {
     let without_escape = LineParser::new(line).parse();
-    let with_escape = if let Some(escaped) = unescape(line) {
-        LineParser::new(&escaped).parse()
+    let with_escape = if let Some(unescaped) = unescape(line) {
+        LineParser::new(&unescaped).parse()
     } else {
         vec![]
     };
