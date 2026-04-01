@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **Core**: Added latency logging for lsp requests.
+
 ## [1.1.0] - 2026-04-01
 ### Added
 - **Core**: Added tree-sitter dockerfile support.
