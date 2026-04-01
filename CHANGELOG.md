@@ -2,7 +2,7 @@
 
 All notable changes to the Path Server will be documented in this file.
 
-## [Unreleased]
+## [1.1.0] - 2026-04-01
 ### Added
 - **Core**: Added tree-sitter dockerfile support.
 - **Core**: Added tree-sitter supported log when opening a document.
