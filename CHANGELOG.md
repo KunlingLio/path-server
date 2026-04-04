@@ -2,9 +2,9 @@
 
 All notable changes to the Path Server will be documented in this file.
 
-## [Unreleased]
+## [1.1.1] - 2026-04-04
 ### Added
-- **Core**: Added latency logging for lsp requests.
+- **Core**: Added latency logging for LSP requests.
 
 ### Fixed
 - **Zed**: Fixed an issue where zed extension refuses to download v1.x.x versions of Path Server.
