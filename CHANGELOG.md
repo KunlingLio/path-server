@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Improved
+- Refactored the structure of README.md to make it more friendly for new users.
+
 ## [1.1.1] - 2026-04-04
 ### Added
 - **Core**: Added latency logging for LSP requests.

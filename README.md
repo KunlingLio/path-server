@@ -24,26 +24,72 @@ It's currently compatible with **VS Code** and **Zed** (awaiting official review
 - **Language Compatibility**: Supports all text files, regardless of programming languages.
 - **Cross IDEs**: Works seamlessly with any editors that support the Language Server Protocol (e.g., VS Code, Zed, Neovim).
 
-## Support Platforms
-| Platform | x86_64 | Aarch64 |
-| :--- | :--- | :--- |
-| **Windows** | Build & Test | Build Only |
-| **Linux** | Build & Test | Build Only |
-| **macOS** | Build Only | Build & Test |
-
 ## Usage
-You can use Path Server by installing the extension for your editor, or by building it from source.
+You can integrate Path Server into your editor by installing the extension.
 
-After installing, start typing a path prefix like `./`, `/` or `C:\` in any file to trigger path suggestions.
+### Visual Studio Code
+#### Installation via VS Code marketplace (Recommended)
+The official `Path Server` extension is available in [VS Code extensions marketplace](https://marketplace.visualstudio.com/items?itemName=LKL.path-server). You can search `Path Server` and install it in the VS Code extensions page.
 
-### VS Code
-1. Search for `Path Server` in the [VS Code extensions marketplace](https://marketplace.visualstudio.com/items?itemName=LKL.path-server), or download the `.vsix` file from [releases](https://github.com/kunlinglio/path-server/releases) and install it manually.
-2. Open Settings and search for `path-server`, or run the command `Path Server: Open Configuration` to customize options.
-3. Toggle the Output panel and select `Path Server Language Server` to view detailed logs.
+#### Manual Installation
+If you are using an open source version of VSCode, you might need to install the extension manually.
+1. Navigate to the latest [release](https://github.com/kunlinglio/path-server/releases) and download the `.vsix` file compatible with your system.
+2. Copy the file to your `.vscode/extensions` directory.
+3. Install via the command line `code --install-extension /path/to/path-server_vscode_*.vsix`
+
+#### Build from source
+If you prefer to build the binary yourself, you'll need [Rust](https://rustup.rs/) installed.
+
+1. Build the Path Server binary.
+    ```shell
+    cargo build --release
+    ```
+    Path Server defaults to single-threaded mode for minimal resource usage. If you prefer to build with multi-threading support, enable multi-threading with the `multi-thread` feature flag:
+    ```shell
+    cargo build --release --features multi-thread
+    ```
+2. Package VS Code Extension (`.vsix`).
+    ```shell
+    cd extensions/vscode
+    npm install
+    npm run build
+    ```
+3. Install `.vsix` file manually.
+    The packaged `.vsix` file will be output to the `dist/` directory. You can install it manually via:
+    ```shell
+    code --install-extension path-server_vscode_*.vsix
+    ```
+
+#### Commands
+You can call Path Server commands via the Command Palette (`Cmd/Ctrl + Shift + P`):
+- `Path Server: Restart Server`: Restart the Path Server language server.
+- `Path Server: Open Configuration`: Open the Path Server **configuration** in a new tab.
 
 ### Zed (Awaiting Official Review from Zed team)
-1. Search for `Path Server` in the Zed extensions catalog.
-2. Run `zed: open settings file` from the command palette to edit settings. Example:
+Search for `Path Server` in the Zed extensions catalog and click install.
+
+> **Note**: Zed does not support package extension manually for now.
+
+> **Note**: Document Links (path underline highlight) is not yet supported in Zed as it does not implement the LSP Document Link feature.
+
+## Configuration
+Path Server support custom configuration via LSP workspace configuration. You can customize Path Server's behavior through your editor.
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `path-server.basePath` | Array | `[ "${document}", "${workspaceFolder}"]` | Base paths for relative path completion, highlight and jump. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. The order determines the priority in suggestions.|
+| `path-server.completion.maxResults` | Number | `0` | Max results shown in completion. `0` indicates no limit. |
+| `path-server.completion.showHiddenFiles` | Boolean | `true` | Whether to show hidden files in completion. |
+| `path-server.completion.exclude` | Array | `["**/node_modules", "**/.git", "**/.DS_Store"]` | List of paths to exclude from completion. Supports glob patterns. |
+| `path-server.completion.triggerNextCompletion` | Boolean | `true` | Whether to automatically trigger the next completion after selecting a path. |
+| `path-server.highlight.enable` | Boolean | `true` | Whether to highlight paths in the editor with underlines. |
+| `path-server.highlight.highlightDirectory` | Boolean | `true` | Whether to highlight directory paths. (Jump behavior may vary by editor/OS).|
+
+### Visual Studio Code
+Open Settings and search for `path-server`, or run the command `Path Server: Open Configuration` to open customizable options in a new tab.
+
+### Zed
+Run `zed: open settings file` from the command palette to edit user settings json file. And append path server settings below it. For example:
 
 ```json
 {
@@ -64,50 +110,14 @@ After installing, start typing a path prefix like `./`, `/` or `C:\` in any file
 }
 ```
 
-> **Note**: Document Links (path underline highlight) is not yet supported in Zed as it does not implement the LSP Document Link feature.
+## Support Platforms
+| Platform | x86_64 | Aarch64 |
+| :--- | :--- | :--- |
+| **Windows** | Build & Test | Build Only |
+| **Linux** | Build & Test | Build Only |
+| **macOS** | Build Only | Build & Test |
 
-### Build from Source
-If you prefer to build the binary yourself, you'll need [Rust](https://rustup.rs/) installed.
-
-#### Standard build
-```shell
-cargo build --release
-```
-
-#### Multi-threaded build
-Path Server defaults to single-threaded mode for minimal resource usage. Enable multi-threading with the `multi-thread` feature flag:
-```shell
-cargo build --release --features multi-thread
-```
-
-#### Package VS Code Extension (`.vsix`)
-```shell
-cd extensions/vscode
-npm install
-npm run build
-```
-
-The packaged `.vsix` file will be output to the `dist/` directory. You can install it manually via:
-```shell
-code --install-extension path-server_vscode_*.vsix
-```
-
-> **Note**: Zed does not support package extension manually for now.
-
-### Configuration
-You can customize Path Server's behavior via your editor's settings.
-
-| Property | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `path-server.basePath` | Array | `[ "${document}", "${workspaceFolder}"]` | Base paths for relative path completion, highlight and jump. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. The order determines the priority in suggestions.|
-| `path-server.completion.maxResults` | Number | `0` | Max results shown in completion. `0` indicates no limit. |
-| `path-server.completion.showHiddenFiles` | Boolean | `true` | Whether to show hidden files in completion. |
-| `path-server.completion.exclude` | Array | `["**/node_modules", "**/.git", "**/.DS_Store"]` | List of paths to exclude from completion. Supports glob patterns. |
-| `path-server.completion.triggerNextCompletion` | Boolean | `true` | Whether to automatically trigger the next completion after selecting a path. |
-| `path-server.highlight.enable` | Boolean | `true` | Whether to highlight paths in the editor with underlines. |
-| `path-server.highlight.highlightDirectory` | Boolean | `true` | Whether to highlight directory paths. (Jump behavior may vary by editor/OS).|
-
-## Resources
+## References
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
 - [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=LKL.path-server)
 - [Path Server Icon](https://pictogrammers.com/library/mdi/icon/slash-forward-box/)
